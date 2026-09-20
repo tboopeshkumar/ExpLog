@@ -1,0 +1,100 @@
+name: ExpMgr
+
+options:
+  bundleIdPrefix: com.boopeshkumar
+  deploymentTarget:
+    iOS: "27.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    # Swift 5 language mode on purpose. Swift 6's strict concurrency checking
+    # rejects a few shared-state patterns used here (the static ModelContainer,
+    # in particular). Worth moving to 6 later, not while getting it running.
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    # Set DEVELOPMENT_TEAM here, or pick your team in Xcode's Signing pane.
+    TARGETS_SWIFT_STRICT_CONCURRENCY: minimal
+
+targets:
+
+  ExpMgr:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+      - path: Resources
+    dependencies:
+      - target: ShareExtension
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.boopeshkumar.expmgr
+        PRODUCT_NAME: ExpMgr
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: ExpMgr
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        UILaunchScreen: {}
+        # How the share extension reaches the app when there's no App Group.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.boopeshkumar.expmgr
+            CFBundleURLSchemes:
+              - expmgr
+    # App Group — commented out because it requires a paid Apple Developer
+    # Program membership. With a free Apple ID, leaving it in makes the build
+    # fail: "provisioning profile does not support the App Groups capability".
+    # Without it the app still works; the extension hands transactions over
+    # through expmgr:// instead (see Shared/TransactionLink.swift).
+    #
+    # After enrolling, uncomment this block AND the matching one on
+    # ShareExtension below, then re-run `xcodegen generate`.
+    #
+    # entitlements:
+    #   path: App/ExpMgr.entitlements
+    #   properties:
+    #     com.apple.security.application-groups:
+    #       - group.com.boopeshkumar.expmgr
+
+  ShareExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.boopeshkumar.expmgr.share
+        # Distinct from the app's module name — sharing one would collide in the
+        # build products. The name shown in the share sheet comes from
+        # CFBundleDisplayName below, not from here.
+        PRODUCT_NAME: ShareExtension
+        PRODUCT_MODULE_NAME: ShareExtension
+    info:
+      path: ShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: ExpMgr
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            # Text only: this extension exists to receive a selected SMS.
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+    # Uncomment together with the app's block above, after enrolling in the
+    # Apple Developer Program.
+    #
+    # entitlements:
+    #   path: ShareExtension/ShareExtension.entitlements
+    #   properties:
+    #     com.apple.security.application-groups:
+    #       - group.com.boopeshkumar.expmgr
