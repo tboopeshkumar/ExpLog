@@ -170,6 +170,19 @@ To look at the app with the sample data in it:
 ./Tools/seed-demo.sh <simulator-udid>
 ```
 
+## The app icon
+
+Drawn in code — `Tools/IconGen/main.swift` — rather than kept as a binary blob,
+so colours and proportions are editable and the result is reproducible:
+
+```bash
+./Tools/make-icon.sh
+```
+
+That writes the 1024×1024 PNG into the asset catalog; Xcode derives the smaller
+sizes. iOS requires a full square with no alpha and no rounded corners, so the
+renderer produces exactly that and lets the system apply its own mask.
+
 ## Known gaps
 
 - No App Intents target, so no fully hands-off Shortcuts automation yet. The
