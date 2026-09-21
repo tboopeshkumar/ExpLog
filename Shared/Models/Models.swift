@@ -75,7 +75,6 @@ public final class Transaction {
     public var date: Date = Date.now
     public var merchant: String = ""
     public var note: String = ""
-    public var isCredit: Bool = false
 
     /// Bank reference, when the SMS carried one. Also used to avoid saving the
     /// same alert twice.
@@ -96,7 +95,6 @@ public final class Transaction {
         date: Date = .now,
         merchant: String = "",
         note: String = "",
-        isCredit: Bool = false,
         reference: String? = nil,
         rawMessage: String? = nil,
         category: ExpenseCategory? = nil,
@@ -107,16 +105,10 @@ public final class Transaction {
         self.date = date
         self.merchant = merchant
         self.note = note
-        self.isCredit = isCredit
         self.reference = reference
         self.rawMessage = rawMessage
         self.category = category
         self.account = account
         self.createdAt = .now
-    }
-
-    /// Signed value for summing: credits count as money coming back.
-    public var signedAmount: Decimal {
-        isCredit ? -amount : amount
     }
 }

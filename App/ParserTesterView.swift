@@ -31,7 +31,6 @@ struct ParserTesterView: View {
                     row("Card", parsed.cardLast4.map { "••\($0)" })
                     row("Date", parsed.date?.formatted(.dateTime.day().month().year()))
                     row("Reference", parsed.reference)
-                    row("Direction", parsed.kind.rawValue.capitalized)
                 }
                 if !parsed.missingFields.isEmpty {
                     Section {

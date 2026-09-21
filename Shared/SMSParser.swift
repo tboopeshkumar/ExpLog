@@ -18,7 +18,6 @@ public enum SMSParser {
 
         var result = ParsedTransaction()
         result.raw = message
-        result.kind = isCredit(message) ? .credit : .debit
 
         if let money = matchAmount(in: message) {
             result.currency = money.currency
@@ -52,15 +51,6 @@ public enum SMSParser {
 
     private static func isNonTransaction(_ text: String) -> Bool {
         rejectPatterns.contains { firstMatch(of: $0, in: text, caseInsensitive: true) != nil }
-    }
-
-    private static func isCredit(_ text: String) -> Bool {
-        let creditPatterns = [
-            #"\bcredited\b"#,
-            #"\brefund(ed)?\b"#,
-            #"\brevers(al|ed)\b"#,
-        ]
-        return creditPatterns.contains { firstMatch(of: $0, in: text, caseInsensitive: true) != nil }
     }
 
     // MARK: - Amount

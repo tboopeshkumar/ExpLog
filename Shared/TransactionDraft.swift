@@ -11,7 +11,6 @@ public final class TransactionDraft {
     public var date: Date = .now
     public var merchant: String = ""
     public var note: String = ""
-    public var isCredit: Bool = false
     public var reference: String?
     public var rawMessage: String?
 
@@ -37,7 +36,6 @@ public final class TransactionDraft {
         date = transaction.date
         merchant = transaction.merchant
         note = transaction.note
-        isCredit = transaction.isCredit
         reference = transaction.reference
         rawMessage = transaction.rawMessage
         category = transaction.category
@@ -50,7 +48,6 @@ public final class TransactionDraft {
         amount = parsed.amount ?? 0
         currencyCode = parsed.currency ?? "AED"
         date = parsed.date ?? receivedAt
-        isCredit = parsed.kind == .credit
         reference = parsed.reference
         rawMessage = parsed.raw
         unparsedFields = parsed.missingFields
@@ -126,7 +123,6 @@ public final class TransactionDraft {
         transaction.date = date
         transaction.merchant = merchant.trimmingCharacters(in: .whitespaces)
         transaction.note = note
-        transaction.isCredit = isCredit
         transaction.reference = reference
         transaction.rawMessage = rawMessage
         transaction.category = category

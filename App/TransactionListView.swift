@@ -84,7 +84,7 @@ struct TransactionListView: View {
     }
 
     private func total(of items: [Transaction]) -> String {
-        let sum = items.reduce(Decimal(0)) { $0 + $1.signedAmount }
+        let sum = items.reduce(Decimal(0)) { $0 + $1.amount }
         return Formatting.money(sum, code: items.first?.currencyCode ?? "AED")
     }
 
@@ -126,7 +126,6 @@ struct TransactionRow: View {
 
             Text(Formatting.money(transaction.amount, code: transaction.currencyCode))
                 .monospacedDigit()
-                .foregroundStyle(transaction.isCredit ? .green : .primary)
         }
         .padding(.vertical, 2)
     }

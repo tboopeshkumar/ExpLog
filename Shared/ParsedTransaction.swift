@@ -4,18 +4,12 @@ import Foundation
 /// what it found and the UI lets you fill in the rest. Nothing is ever silently
 /// invented.
 public struct ParsedTransaction: Equatable, Sendable {
-    public enum Kind: String, Sendable {
-        case debit
-        case credit
-    }
-
     public var amount: Decimal?
     public var currency: String?
     public var merchant: String?
     public var cardLast4: String?
     public var date: Date?
     public var reference: String?
-    public var kind: Kind = .debit
 
     /// The original message, kept on the record so a parser bug can be fixed
     /// after the fact without losing the transaction.

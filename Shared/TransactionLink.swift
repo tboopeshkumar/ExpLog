@@ -18,7 +18,6 @@ public enum TransactionLink {
         static let date = "date"
         static let merchant = "merchant"
         static let note = "note"
-        static let credit = "credit"
         static let reference = "ref"
         static let card = "card"
         static let raw = "raw"
@@ -36,7 +35,6 @@ public enum TransactionLink {
             URLQueryItem(name: Key.currency, value: draft.currencyCode),
             URLQueryItem(name: Key.date, value: "\(draft.date.timeIntervalSince1970)"),
             URLQueryItem(name: Key.merchant, value: draft.merchant),
-            URLQueryItem(name: Key.credit, value: draft.isCredit ? "1" : "0"),
         ]
         if !draft.note.isEmpty { items.append(URLQueryItem(name: Key.note, value: draft.note)) }
         if let reference = draft.reference { items.append(URLQueryItem(name: Key.reference, value: reference)) }
@@ -70,7 +68,6 @@ public enum TransactionLink {
         draft.currencyCode = values[Key.currency] ?? "AED"
         draft.merchant = values[Key.merchant] ?? ""
         draft.note = values[Key.note] ?? ""
-        draft.isCredit = values[Key.credit] == "1"
         draft.reference = values[Key.reference]
         draft.rawMessage = values[Key.raw]
         draft.parsedLast4 = values[Key.card]

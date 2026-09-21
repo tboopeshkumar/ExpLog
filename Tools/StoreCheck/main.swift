@@ -100,7 +100,7 @@ func run() throws {
     print("\nTOTALS\n")
 
     let all = try context.fetch(FetchDescriptor<Transaction>())
-    let total = all.reduce(Decimal(0)) { $0 + $1.signedAmount }
+    let total = all.reduce(Decimal(0)) { $0 + $1.amount }
     expect(all.count == 2, "two transactions stored", "found \(all.count)")
     expect(total == Decimal(string: "42.77"), "month total 42.77", "got \(total)")
 

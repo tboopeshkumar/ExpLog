@@ -6,13 +6,12 @@ enum CSVExporter {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate]
 
-        var lines = ["Date,Amount,Currency,Type,Merchant,Category,Account,Note,Reference"]
+        var lines = ["Date,Amount,Currency,Merchant,Category,Account,Note,Reference"]
         for transaction in transactions.sorted(by: { $0.date > $1.date }) {
             let fields = [
                 formatter.string(from: transaction.date),
                 "\(transaction.amount)",
                 transaction.currencyCode,
-                transaction.isCredit ? "Credit" : "Debit",
                 transaction.merchant,
                 transaction.category?.name ?? "",
                 transaction.account?.name ?? "",
