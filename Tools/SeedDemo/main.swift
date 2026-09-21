@@ -21,11 +21,21 @@ let messages = [
     "A txn on your Card XXXX8802 at DIAMOND CABS CITYCENT for AED  17.00 on 20-Sep at 11:30  is approved. Your available balance is XXXX.95",
     "Thank you for using Card ending 6150 at ROUND CLOCK MART SUPERMA for AED 2.25. Avl. limit is AED XXX.80.",
     "Thank you for using Card ending 6150 at BEANERY PLAZA 20THFLOOR for AED 31.20. Avl. limit is AED XXX.05.",
+    "Thank you for using Card ending 6150 at PETROLINE STATION 42 for AED 95.00. Avl. limit is AED XXX.40.",
+    "Thank you for using Card ending 6150 at CITYCARE PHARMACY for AED 48.75. Avl. limit is AED XXX.65.",
+    "Thank you for using Card ending 6150 at METRO POWER UTILITY for AED 310.00. Avl. limit is AED XXX.65.",
+    "Thank you for using Card ending 6150 at STARLIGHT CINEMAS for AED 70.00. Avl. limit is AED XXX.65.",
+    "Thank you for using Card ending 6150 at SKYWAYS AIR for AED 845.00. Avl. limit is AED XXX.65.",
 ]
 
 /// Category each sample belongs to, so the demo shows icons rather than blanks.
 let categoryForMessage = [
-    "V Northgate And Sons L": "Groceries",
+    "V Northgate And Sons L": "Shopping",
+    "Petroline Station 42": "Fuel",
+    "Citycare Pharmacy": "Health",
+    "Metro Power Utility": "Bills & Utilities",
+    "Starlight Cinemas": "Entertainment",
+    "Skyways Air": "Travel",
     "Mega Center Riverton Xyz": "Groceries",
     "Diamond Cabs Citycent": "Transport",
     "Round Clock Mart Superma": "Groceries",

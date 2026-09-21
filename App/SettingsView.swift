@@ -134,7 +134,10 @@ struct CategoriesView: View {
 
             Section {
                 ForEach(categories) { category in
-                    Label(category.name, systemImage: category.symbol)
+                    HStack(spacing: 12) {
+                        CategoryIcon(category, size: 28)
+                        Text(category.name)
+                    }
                 }
                 .onDelete { offsets in
                     for index in offsets { context.delete(categories[index]) }

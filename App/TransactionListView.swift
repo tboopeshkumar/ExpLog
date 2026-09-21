@@ -101,10 +101,7 @@ struct TransactionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: transaction.category?.symbol ?? "questionmark.circle")
-                .font(.system(size: 16))
-                .frame(width: 32, height: 32)
-                .background(.quaternary, in: .rect(cornerRadius: 8))
+            CategoryIcon(transaction.category)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(transaction.merchant.isEmpty ? "Unnamed" : transaction.merchant)
