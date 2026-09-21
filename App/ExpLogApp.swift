@@ -27,13 +27,18 @@ struct RootView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
     @State private var imported: [Transaction] = []
+    /// Reopens on the tab you last used.
+    @AppStorage("selectedTab") private var selectedTab: AppTab = .expenses
 
     var body: some View {
-        TabView {
-            Tab("Expenses", systemImage: "list.bullet") {
+        TabView(selection: $selectedTab) {
+            Tab("Expenses", systemImage: "list.bullet", value: .expenses) {
                 NavigationStack { TransactionListView() }
             }
-            Tab("Settings", systemImage: "gearshape") {
+            Tab("Summary", systemImage: "chart.bar", value: .summary) {
+                NavigationStack { SummaryView() }
+            }
+            Tab("Settings", systemImage: "gearshape", value: .settings) {
                 NavigationStack { SettingsView() }
             }
         }
@@ -61,4 +66,8 @@ struct RootView: View {
             .map { "\($0.merchant) — \(Formatting.money($0.amount, code: $0.currencyCode))" }
             .joined(separator: "\n")
     }
+}
+
+enum AppTab: String {
+    case expenses, summary, settings
 }

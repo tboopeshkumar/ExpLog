@@ -137,6 +137,43 @@ func run() throws {
     expect(TransactionLink.draft(from: URL(string: "https://example.com/add?amount=5")!, context: context) == nil,
            "a non-explog URL is rejected")
 
+    // Monthly summary by category. The store already holds two Groceries
+    // transactions in September 2026 (30.02 + 12.75); add one Dining, one
+    // uncategorised, and one in October that September must not include.
+    print("\nMONTHLY SUMMARY\n")
+
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .current
+    func day(_ month: Int, _ day: Int) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: 12))!
+    }
+    let dining = categories.first { $0.name == "Dining" }
+    context.insert(Transaction(amount: Decimal(string: "20.00")!, date: day(9, 22), merchant: "Cafe", category: dining))
+    context.insert(Transaction(amount: Decimal(string: "7.23")!, date: day(9, 23), merchant: "Kiosk"))
+    context.insert(Transaction(amount: Decimal(string: "99.00")!, date: day(10, 2), merchant: "Next month", category: groceries))
+    try context.save()
+
+    let everything = try context.fetch(FetchDescriptor<Transaction>())
+    let september = MonthSummary(month: day(9, 15), transactions: everything, calendar: calendar)
+
+    expect(september.total == Decimal(string: "70.00"), "September total 70.00, October excluded", "got \(september.total)")
+    expect(september.count == 4, "four September transactions", "got \(september.count)")
+    expect(september.rows.count == 3, "three rows: Groceries, Dining, uncategorised", "got \(september.rows.count)")
+    expect(september.rows.map(\.amount) == [Decimal(string: "42.77"), Decimal(string: "20.00"), Decimal(string: "7.23")].compactMap { $0 },
+           "rows ranked largest first", "\(september.rows.map(\.amount))")
+    expect(september.rows.first?.category === groceries && september.rows.first?.count == 2,
+           "top row is Groceries with 2 transactions")
+    expect(september.rows.last?.category == nil, "uncategorised spending is its own row")
+    let shareSum = september.rows.reduce(0) { $0 + $1.share }
+    expect(abs(shareSum - 1) < 0.000001, "shares add up to 100%", "got \(shareSum)")
+    expect(abs((september.rows.first?.share ?? 0) - 42.77 / 70) < 0.000001, "Groceries share is 42.77 / 70")
+
+    let october = MonthSummary(month: day(10, 1), transactions: everything, calendar: calendar)
+    expect(october.total == Decimal(99) && october.rows.count == 1, "October has only its own transaction")
+
+    let empty = MonthSummary(month: day(3, 1), transactions: everything, calendar: calendar)
+    expect(empty.isEmpty && empty.rows.isEmpty && empty.total == 0, "a month with no spending is empty, not an error")
+
     print("")
     if failures == 0 {
         print("All checks passed.\n")

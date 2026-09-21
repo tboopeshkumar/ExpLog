@@ -185,6 +185,18 @@ That writes the 1024×1024 PNG into the asset catalog; Xcode derives the smaller
 sizes. iOS requires a full square with no alpha and no rounded corners, so the
 renderer produces exactly that and lets the system apply its own mask.
 
+## Monthly summary
+
+The Summary tab shows one month's total and its spending by category, ranked,
+with each row's share as a bar; tapping a row lists that category's expenses
+for the month. The totals come from `Shared/MonthSummary.swift`, which is
+covered by `check-store.sh`.
+
+The share bars are deliberately one colour. Nine category colours can't all be
+told apart — system red and pink measure ΔE 3.3 against a floor of 15 — so the
+chart doesn't rely on them: the bars show size, and the coloured icon and name
+beside each bar say which category it is.
+
 ## The Dirham sign
 
 Amounts in AED show the UAE Dirham sign (U+20C3) rather than "AED". No iOS 27
@@ -204,7 +216,7 @@ way to the plain character.
   adding one later is a small target, not a rewrite.
 - Monthly totals assume a single currency; a mixed-currency month sums the
   numbers and labels them with the first transaction's currency.
-- No budgets, recurring transactions, or reports. Out of MVP scope by choice.
+- No budgets or recurring transactions. Out of scope by choice.
 - The share sheet flow has not been exercised through the UI — the extension is
   built, embedded and registered for text, and everything it does on Save is
   covered by `check-store.sh`, but nobody has yet tapped Share → ExpLog on a
