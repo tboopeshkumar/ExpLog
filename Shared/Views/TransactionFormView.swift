@@ -82,7 +82,6 @@ public struct TransactionFormView: View {
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
                     .focused($amountFocused)
             }
-            Toggle("Money received", isOn: $draft.isCredit)
         } footer: {
             if !draft.unparsedFields.isEmpty {
                 Label(
