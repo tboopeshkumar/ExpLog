@@ -102,17 +102,13 @@ public struct TransactionFormView: View {
             DatePicker("Date", selection: $draft.date)
 
             if showsCategoryAndAccount {
-                // A pushed list rather than a Picker: iOS draws menu icons in a
-                // single colour, which would drop the category colours.
-                NavigationLink {
-                    CategoryChooser(categories: categories, selection: $draft.category)
-                } label: {
-                    HStack(spacing: 12) {
-                        CategoryIcon(draft.category, size: 28)
-                        Text("Category")
-                        Spacer()
-                        Text(draft.category?.name ?? "None")
-                            .foregroundStyle(.secondary)
+                Picker("Category", selection: $draft.category) {
+                    Text("None").tag(ExpenseCategory?.none)
+                    ForEach(categories) { category in
+                        // menuIcon, not systemImage: a plain symbol would be
+                        // redrawn in one colour by the menu.
+                        Label { Text(category.name) } icon: { category.menuIcon }
+                            .tag(ExpenseCategory?.some(category))
                     }
                 }
 
@@ -180,45 +176,6 @@ public struct TransactionFormView: View {
             onSave()
         } catch {
             errorMessage = error.localizedDescription
-        }
-    }
-}
-
-/// The category list pushed from the form. Rows show each category's coloured
-/// icon, with a checkmark on the current choice; picking one returns to the form.
-struct CategoryChooser: View {
-    let categories: [ExpenseCategory]
-    @Binding var selection: ExpenseCategory?
-
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        List {
-            row(for: nil)
-            ForEach(categories) { category in
-                row(for: category)
-            }
-        }
-        .navigationTitle("Category")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func row(for category: ExpenseCategory?) -> some View {
-        Button {
-            selection = category
-            dismiss()
-        } label: {
-            HStack(spacing: 12) {
-                CategoryIcon(category, size: 28)
-                Text(category?.name ?? "None")
-                    .foregroundStyle(.primary)
-                Spacer()
-                if selection == category {
-                    Image(systemName: "checkmark")
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.tint)
-                }
-            }
         }
     }
 }
