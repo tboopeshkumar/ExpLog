@@ -50,16 +50,6 @@ final class ShareViewController: UIViewController {
     private func install(text: String) {
         let root = ShareRootView(
             sharedText: text,
-            openHost: { [weak self] url, completion in
-                // NSExtensionContext.open is the only sanctioned way for an
-                // extension to launch its containing app; UIApplication.shared
-                // is unavailable here.
-                guard let context = self?.extensionContext else {
-                    completion(false)
-                    return
-                }
-                context.open(url, completionHandler: completion)
-            },
             onFinish: { [weak self] in self?.finish() },
             onCancel: { [weak self] in self?.cancel() }
         )

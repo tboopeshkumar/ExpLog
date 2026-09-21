@@ -46,25 +46,22 @@ targets:
         CFBundleDisplayName: ExpLog
         CFBundleShortVersionString: $(MARKETING_VERSION)
         UILaunchScreen: {}
-        # How the share extension reaches the app when there's no App Group.
-        CFBundleURLTypes:
-          - CFBundleURLName: com.boopeshkumar.explog
-            CFBundleURLSchemes:
-              - explog
-    # App Group — commented out because it requires a paid Apple Developer
-    # Program membership. With a free Apple ID, leaving it in makes the build
-    # fail: "provisioning profile does not support the App Groups capability".
-    # Without it the app still works; the extension hands transactions over
-    # through explog:// instead (see Shared/TransactionLink.swift).
-    #
-    # After enrolling, uncomment this block AND the matching one on
-    # ShareExtension below, then re-run `xcodegen generate`.
-    #
-    # entitlements:
-    #   path: App/ExpLog.entitlements
-    #   properties:
-    #     com.apple.security.application-groups:
-    #       - group.com.boopeshkumar.explog
+        # Read by SharedInbox; must match the keychain group below.
+        ExpLogKeychainGroup: $(AppIdentifierPrefix)com.boopeshkumar.explog.shared
+    entitlements:
+      path: App/ExpLog.entitlements
+      properties:
+        # Shared keychain: how the share extension passes transactions to the
+        # app on a free Apple ID (see Shared/SharedInbox.swift). Free team
+        # profiles already grant "<team>.*", so this needs no paid membership.
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.boopeshkumar.explog.shared
+        # App Group — needs a paid Apple Developer Program membership; with a
+        # free Apple ID it fails the build ("provisioning profile does not
+        # support the App Groups capability"). After enrolling, uncomment
+        # here AND on ShareExtension, then re-run `xcodegen generate`.
+        # com.apple.security.application-groups:
+        #   - group.com.boopeshkumar.explog
 
   ShareExtension:
     type: app-extension
@@ -92,11 +89,12 @@ targets:
             # Text only: this extension exists to receive a selected SMS.
             NSExtensionActivationRule:
               NSExtensionActivationSupportsText: true
-    # Uncomment together with the app's block above, after enrolling in the
-    # Apple Developer Program.
-    #
-    # entitlements:
-    #   path: ShareExtension/ShareExtension.entitlements
-    #   properties:
-    #     com.apple.security.application-groups:
-    #       - group.com.boopeshkumar.explog
+        ExpLogKeychainGroup: $(AppIdentifierPrefix)com.boopeshkumar.explog.shared
+    entitlements:
+      path: ShareExtension/ShareExtension.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.boopeshkumar.explog.shared
+        # Uncomment together with the app's, after enrolling.
+        # com.apple.security.application-groups:
+        #   - group.com.boopeshkumar.explog

@@ -23,12 +23,16 @@ picks the route at runtime, in `SharedStore.isAppGroupAvailable`:
 | | Paid account | Free Apple ID |
 |---|---|---|
 | Store | One database in the App Group | The app's own container |
-| On Save | Extension writes it directly | Extension opens `explog://add?…`, the app saves it |
-| App launches? | No | Yes, briefly |
-| Card + category prefill | In the form | Applied by the app on receipt |
+| On Save | Extension writes it directly | Extension queues it in a shared keychain group |
+| Appears in the app | Immediately | Next time ExpLog opens |
+| Card + category prefill | In the form | Applied by the app on import |
 
-The free path is `Shared/TransactionLink.swift`. Nothing needs rewriting if you
-enroll later — the App Group route switches itself back on.
+You stay in Messages either way. The free path is `Shared/SharedInbox.swift`:
+free team provisioning profiles grant keychain access to `<team>.*`, so a
+shared keychain group works where an App Group doesn't. (Opening the app from
+the extension isn't an option — iOS refuses `NSExtensionContext.open` from a
+share extension.) Nothing needs rewriting if you enroll later — the App Group
+route switches itself back on.
 
 ## The parser
 
@@ -115,9 +119,7 @@ Build and run. Press ⌘R.
 
 - **Free Apple ID** — works. The build expires after 7 days and has to be
   re-run from Xcode, and App Groups aren't available, so the extension takes the
-  `explog://` route described above. Xcode will show an App Group provisioning
-  error on the Signing pane; the app still builds and runs, and handles it at
-  runtime.
+  shared-keychain route described above.
 - **Apple Developer Program ($99/yr)** — builds last a year, the App Group
   works, and iCloud sync becomes possible.
 
@@ -195,9 +197,6 @@ renderer produces exactly that and lets the system apply its own mask.
   built, embedded and registered for text, and everything it does on Save is
   covered by `check-store.sh`, but nobody has yet tapped Share → ExpLog on a
   real message. That's the first thing to try on a device.
-- On the free-account route, `NSExtensionContext.open` is the documented way for
-  an extension to launch its containing app, but it has not been exercised on a
-  device here. If iOS refuses it, the form says so rather than failing silently.
 
 ## Anonymised fixtures
 

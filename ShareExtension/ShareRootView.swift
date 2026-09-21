@@ -8,13 +8,12 @@ import SwiftData
 ///
 /// - **App Group available** (paid Developer Program): writes straight into the
 ///   shared database and dismisses. The app never launches.
-/// - **No App Group** (free Apple ID): opens `explog://add?...` and the app
-///   saves it. One extra app switch, no retyping either way.
+/// - **No App Group** (free Apple ID): drops it in SharedInbox and dismisses.
+///   The app saves it the next time it opens.
+///
+/// You stay in Messages either way.
 struct ShareRootView: View {
     let sharedText: String
-    /// Opens a URL through the extension context. Returns false when iOS
-    /// refuses, which is the one failure mode worth showing the user.
-    let openHost: (URL, @escaping (Bool) -> Void) -> Void
     let onFinish: () -> Void
     let onCancel: () -> Void
 
@@ -23,21 +22,18 @@ struct ShareRootView: View {
     @State private var draft: TransactionDraft?
     @State private var duplicate: Transaction?
     @State private var saved = false
-    @State private var handoffFailed = false
 
     private var canSaveDirectly: Bool { SharedStore.isAppGroupAvailable }
 
     var body: some View {
         NavigationStack {
             Group {
-                if handoffFailed {
-                    handoffFailedView
-                } else if let draft {
+                if let draft {
                     TransactionFormView(
                         draft: draft,
                         showsCategoryAndAccount: canSaveDirectly,
-                        saveAction: canSaveDirectly ? nil : handOffToApp,
-                        onSave: { if canSaveDirectly { saved = true } },
+                        saveAction: canSaveDirectly ? nil : SharedInbox.add,
+                        onSave: { saved = true },
                         onCancel: onCancel
                     )
                 } else {
@@ -81,16 +77,6 @@ struct ShareRootView: View {
         }
     }
 
-    private var handoffFailedView: some View {
-        ContentUnavailableView {
-            Label("Couldn't open ExpLog", systemImage: "arrow.up.forward.app")
-        } description: {
-            Text("iOS wouldn't switch to ExpLog from here. Open ExpLog and add this one by hand — the message is still in Messages.")
-        } actions: {
-            Button("Close", action: onCancel)
-        }
-    }
-
     // MARK: - Actions
 
     private func prepare() {
@@ -102,30 +88,6 @@ struct ShareRootView: View {
         // Only meaningful when the extension can see the real database.
         if canSaveDirectly {
             duplicate = TransactionDraft.duplicate(of: newDraft, in: context)
-        }
-    }
-
-    /// No shared database: encode the transaction and let the app save it.
-    private func handOffToApp(_ draft: TransactionDraft) throws {
-        guard let url = TransactionLink.url(for: draft) else {
-            throw HandoffError.couldNotBuildURL
-        }
-        openHost(url) { success in
-            Task { @MainActor in
-                if success {
-                    onFinish()
-                } else {
-                    handoffFailed = true
-                }
-            }
-        }
-    }
-
-    private enum HandoffError: LocalizedError {
-        case couldNotBuildURL
-
-        var errorDescription: String? {
-            "Couldn't prepare this transaction to send to ExpLog."
         }
     }
 }

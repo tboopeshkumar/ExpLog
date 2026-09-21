@@ -25,7 +25,8 @@ struct ExpLogApp: App {
 
 struct RootView: View {
     @Environment(\.modelContext) private var context
-    @State private var received: ReceivedTransaction?
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var imported: [Transaction] = []
 
     var body: some View {
         TabView {
@@ -36,41 +37,28 @@ struct RootView: View {
                 NavigationStack { SettingsView() }
             }
         }
-        .onOpenURL(perform: receive)
-        .alert(received?.title ?? "", isPresented: .constant(received != nil)) {
-            Button("OK") { received = nil }
+        // Picks up anything the share extension left in SharedInbox — the
+        // route taken when there's no App Group. Runs on every return to the
+        // foreground, since that's when a newly shared message is waiting.
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            guard phase == .active else { return }
+            let added = SharedInbox.importPending(into: context)
+            if !added.isEmpty { imported = added }
+        }
+        .alert(importTitle, isPresented: .constant(!imported.isEmpty)) {
+            Button("OK") { imported = [] }
         } message: {
-            Text(received?.message ?? "")
+            Text(importMessage)
         }
     }
 
-    /// Handles `explog://add?...` from the share extension — the path taken when
-    /// there's no App Group, so the extension can't write to the database
-    /// itself. See TransactionLink.
-    private func receive(_ url: URL) {
-        guard let draft = TransactionLink.draft(from: url, context: context) else { return }
-
-        if TransactionDraft.duplicate(of: draft, in: context) != nil {
-            received = ReceivedTransaction(
-                title: "Already logged",
-                message: "\(draft.merchant) for \(Formatting.money(draft.amount, code: draft.currencyCode)) is already in your expenses."
-            )
-            return
-        }
-
-        do {
-            try draft.save(in: context)
-            received = ReceivedTransaction(
-                title: "Added",
-                message: "\(draft.merchant) — \(Formatting.money(draft.amount, code: draft.currencyCode))"
-            )
-        } catch {
-            received = ReceivedTransaction(title: "Couldn't save", message: error.localizedDescription)
-        }
+    private var importTitle: String {
+        imported.count == 1 ? "Added from Messages" : "Added \(imported.count) from Messages"
     }
-}
 
-struct ReceivedTransaction {
-    let title: String
-    let message: String
+    private var importMessage: String {
+        imported
+            .map { "\($0.merchant) — \(Formatting.money($0.amount, code: $0.currencyCode))" }
+            .joined(separator: "\n")
+    }
 }

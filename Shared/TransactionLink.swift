@@ -1,13 +1,13 @@
 import Foundation
 import SwiftData
 
-/// Carries a transaction from the share extension to the app as a URL.
+/// Encodes a transaction as an `explog://add?...` URL string, and back.
 ///
-/// Only used when there is no App Group — that is, on a free Apple ID, where
-/// the two targets cannot share a database. The extension parses the SMS and
-/// shows the form as usual, then opens `explog://add?...` and the app does the
-/// saving, including the card and category lookups the extension can't perform
-/// against a database it cannot see.
+/// This is the payload format SharedInbox stores when there's no App Group. The
+/// URL is never opened — iOS won't let a share extension launch its app — it's
+/// simply a compact, self-describing encoding. Decoding happens app-side, which
+/// is also where the card and category lookups run, since the extension can't
+/// see the app's database.
 public enum TransactionLink {
     public static let scheme = "explog"
     public static let host = "add"
