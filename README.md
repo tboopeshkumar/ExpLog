@@ -185,6 +185,30 @@ That writes the 1024×1024 PNG into the asset catalog; Xcode derives the smaller
 sizes. iOS requires a full square with no alpha and no rounded corners, so the
 renderer produces exactly that and lets the system apply its own mask.
 
+## Importing history
+
+Settings → Import CSV reads ExpLog's own CSV format — an export from the app, or
+history converted from another app. Rows already in ExpLog (same bank
+reference, or same merchant and amount within five minutes) are skipped, so
+importing the same file twice adds nothing; rows within one file are never
+compared against each other, since two identical taxi fares are two records.
+Missing categories and accounts are created by name. Covered by
+`check-store.sh`.
+
+### From Money Manager
+
+Export from Money Manager to Excel, then convert on the Mac:
+
+```bash
+python3 Tools/MoneyManagerImport/convert.py export.xlsx ExpLog-import.csv
+```
+
+The converter maps categories (see `CATEGORY_MAP`), brings foreign-currency
+rows in at Money Manager's AED value with the original amount in the note, and
+refuses to write anything unless every month's total matches the source.
+AirDrop the CSV to the phone and import it. Keep both files out of this
+repository: they're real spending.
+
 ## Monthly summary
 
 The Summary tab shows one month's total and its spending by category, ranked,

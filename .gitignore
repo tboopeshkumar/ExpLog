@@ -22,3 +22,10 @@ xcuserdata/
 
 # macOS
 .DS_Store
+
+# Personal spending data: exports from other apps and CSVs converted for import.
+# These belong outside the repository; this is a safety net.
+*.xlsx
+*.xls
+ExpLog-import*.csv
+ExpLog-*.csv

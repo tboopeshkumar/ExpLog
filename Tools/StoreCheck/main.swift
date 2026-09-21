@@ -174,6 +174,80 @@ func run() throws {
     let empty = MonthSummary(month: day(3, 1), transactions: everything, calendar: calendar)
     expect(empty.isEmpty && empty.rows.isEmpty && empty.total == 0, "a month with no spending is empty, not an error")
 
+    print("\nCSV IMPORT / EXPORT\n")
+
+    let csvRows = CSV.parse("a,b\r\n\"x, y\",\"he said \"\"hi\"\"\"\n\"multi\nline\",z\n\nlast,row")
+    expect(csvRows == [["a", "b"], ["x, y", "he said \"hi\""], ["multi\nline", "z"], ["last", "row"]],
+           "parses quoted commas, doubled quotes, line breaks, CRLF, blank lines, no final newline",
+           "\(csvRows)")
+
+    // Round trip: export this store, import into a fresh one.
+    let exportedURL = try CSV.write(everything)
+    let exported = try String(contentsOf: exportedURL, encoding: .utf8)
+    let freshURL = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: "ExpLogCSV-\(UUID().uuidString).store")
+    defer { try? FileManager.default.removeItem(at: freshURL) }
+    let freshContainer = try ModelContainer(
+        for: SharedStoreSchema.schema,
+        configurations: [ModelConfiguration(schema: SharedStoreSchema.schema, url: freshURL)]
+    )
+    let fresh = ModelContext(freshContainer)
+    SeedData.seedIfNeeded(fresh)
+
+    let firstImport = try CSV.importRows(from: exported, into: fresh)
+    let restored = try fresh.fetch(FetchDescriptor<Transaction>())
+    expect(firstImport.added == everything.count && firstImport.duplicates == 0 && firstImport.rejected.isEmpty,
+           "export then import restores all \(everything.count) transactions", "\(firstImport)")
+    expect(restored.reduce(Decimal(0)) { $0 + $1.amount } == everything.reduce(Decimal(0)) { $0 + $1.amount },
+           "restored total matches the original")
+    let originalTimes = everything.map(\.date.timeIntervalSince1970).sorted()
+    let restoredTimes = restored.map(\.date.timeIntervalSince1970).sorted()
+    expect(zip(originalTimes, restoredTimes).allSatisfy { abs($0 - $1) < 1 }, "times of day survive, not just dates")
+    expect(Set(restored.compactMap(\.category?.name)) == Set(everything.compactMap(\.category?.name)),
+           "categories reattached by name")
+    expect(firstImport.newAccounts == ["Crescent Credit"], "missing account created", "\(firstImport.newAccounts)")
+
+    let secondImport = try CSV.importRows(from: exported, into: fresh)
+    expect(secondImport.added == 0 && secondImport.duplicates == everything.count,
+           "importing the same file again adds nothing", "\(secondImport)")
+
+    let mixed = """
+    Date,Amount,Currency,Merchant,Category,Account,Note,Reference
+    2026-08-10T10:00:00,85.00,AED,Bookshop,Education,Cash,,
+    2026-08-11,12.5,aed,Plain date,,,,
+    not-a-date,1,AED,Broken,,,,
+    2026-08-12T10:00:00,abc,AED,Broken,,,,
+    2026-08-13T10:00:00,5,AED,,,,,
+    """
+    let mixedResult = try CSV.importRows(from: mixed, into: fresh)
+    expect(mixedResult.added == 2, "good rows imported alongside bad ones", "\(mixedResult.added)")
+    expect(mixedResult.rejected.map(\.line) == [4, 5, 6], "bad rows reported by line number",
+           "\(mixedResult.rejected)")
+    expect(mixedResult.newCategories == ["Education"] && mixedResult.newAccounts == ["Cash"],
+           "new category and account created")
+    let education = try fresh.fetch(FetchDescriptor<ExpenseCategory>()).first { $0.name == "Education" }
+    expect(education?.symbol == "book", "Education gets the book icon", education?.symbol ?? "missing")
+    let plainDate = try fresh.fetch(FetchDescriptor<Transaction>()).first { $0.merchant == "Plain date" }
+    expect(plainDate?.currencyCode == "AED", "currency code normalised to upper case")
+
+    let twoFares = """
+    Date,Amount,Currency,Merchant,Category,Account,Note,Reference
+    2026-07-01T08:00:00,13.00,AED,Taxi,Transport,Cash,,
+    2026-07-01T08:00:07,13.00,AED,Taxi,Transport,Cash,,
+    """
+    let fares = try CSV.importRows(from: twoFares, into: fresh)
+    expect(fares.added == 2 && fares.duplicates == 0,
+           "two matching rows in one file are both imported", "\(fares)")
+    let faresAgain = try CSV.importRows(from: twoFares, into: fresh)
+    expect(faresAgain.added == 0 && faresAgain.duplicates == 2,
+           "…and re-importing that file adds neither", "\(faresAgain)")
+
+    do {
+        _ = try CSV.importRows(from: "Name,Value\nx,1\n", into: fresh)
+        expect(false, "a non-ExpLog CSV is refused")
+    } catch {
+        expect(error is CSV.ImportError, "a non-ExpLog CSV is refused")
+    }
+
     print("")
     if failures == 0 {
         print("All checks passed.\n")

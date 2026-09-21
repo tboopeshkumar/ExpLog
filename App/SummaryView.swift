@@ -19,8 +19,11 @@ struct SummaryView: View {
         MonthSummary(month: month, transactions: transactions)
     }
 
-    private var isCurrentMonth: Bool {
-        month >= Formatting.monthStart(.now)
+    /// The furthest month worth stepping to: this one, or later when there are
+    /// future-dated expenses, such as instalments imported from Money Manager.
+    private var isLastMonth: Bool {
+        let latest = transactions.first?.date ?? .now   // sorted newest first
+        return month >= Formatting.monthStart(max(latest, .now))
     }
 
     var body: some View {
@@ -64,7 +67,7 @@ struct SummaryView: View {
                 .font(.headline)
             Spacer()
             Button("Next month", systemImage: "chevron.right") { step(1) }
-                .disabled(isCurrentMonth)
+                .disabled(isLastMonth)
         }
         .labelStyle(.iconOnly)
         // Two buttons in one row: without this, a tap anywhere hits the first.

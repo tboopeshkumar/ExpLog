@@ -10,7 +10,7 @@ xcrun swiftc -target arm64-apple-macosx15.0 -o .build/storecheck \
     Shared/SMSParser.swift \
     Shared/Formatting.swift \
     Shared/SeedData.swift \
-    Shared/TransactionDraft.swift Shared/TransactionLink.swift Shared/MonthSummary.swift \
+    Shared/TransactionDraft.swift Shared/TransactionLink.swift Shared/MonthSummary.swift Shared/CSV.swift \
     Shared/Models/Models.swift \
     Tools/StoreCheck/main.swift
 exec ./.build/storecheck

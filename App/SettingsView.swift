@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
@@ -7,6 +8,8 @@ struct SettingsView: View {
 
     @State private var exportURL: URL?
     @State private var exportError: String?
+    @State private var showingImporter = false
+    @State private var importReport: ImportReport?
 
     var body: some View {
         List {
@@ -26,8 +29,14 @@ struct SettingsView: View {
                     Label("Export CSV", systemImage: "square.and.arrow.up")
                 }
                 .disabled(transactions.isEmpty)
+
+                Button {
+                    showingImporter = true
+                } label: {
+                    Label("Import CSV", systemImage: "square.and.arrow.down")
+                }
             } footer: {
-                Text("\(transactions.count) transaction(s) stored on this device.")
+                Text("\(transactions.count) transaction(s) stored on this device. Import accepts an ExpLog CSV export and skips expenses that are already here.")
             }
 
             Section {
@@ -47,14 +56,72 @@ struct SettingsView: View {
         } message: {
             Text(exportError ?? "")
         }
+        .fileImporter(
+            isPresented: $showingImporter,
+            allowedContentTypes: [.commaSeparatedText, .plainText]
+        ) { result in
+            importCSV(result)
+        }
+        .alert(importReport?.title ?? "", isPresented: .constant(importReport != nil)) {
+            Button("OK") { importReport = nil }
+        } message: {
+            Text(importReport?.message ?? "")
+        }
+    }
+
+    private func importCSV(_ picked: Result<URL, Error>) {
+        do {
+            let url = try picked.get()
+            // Files from outside the app's sandbox (iCloud Drive, AirDrop
+            // inbox) are only readable inside a security-scoped access.
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+            let data = try Data(contentsOf: url)
+            guard let text = String(data: data, encoding: .utf8) else { throw CSV.ImportError.unreadable }
+            importReport = ImportReport(try CSV.importRows(from: text, into: context))
+        } catch {
+            importReport = ImportReport(title: "Import failed", message: error.localizedDescription)
+        }
     }
 
     private func export() {
         do {
-            exportURL = try CSVExporter.write(transactions)
+            exportURL = try CSV.write(transactions)
         } catch {
             exportError = error.localizedDescription
         }
+    }
+}
+
+/// What an import did, phrased for an alert.
+private struct ImportReport {
+    let title: String
+    let message: String
+
+    init(title: String, message: String) {
+        self.title = title
+        self.message = message
+    }
+
+    init(_ result: CSV.ImportResult) {
+        title = result.added == 1 ? "Imported 1 expense" : "Imported \(result.added) expenses"
+        var lines: [String] = []
+        if result.duplicates > 0 {
+            lines.append("Skipped \(result.duplicates) already in ExpLog.")
+        }
+        if !result.newCategories.isEmpty {
+            lines.append("New categories: \(result.newCategories.joined(separator: ", ")).")
+        }
+        if !result.newAccounts.isEmpty {
+            lines.append("New accounts: \(result.newAccounts.joined(separator: ", ")).")
+        }
+        if !result.rejected.isEmpty {
+            let shown = result.rejected.prefix(5).map { "line \($0.line): \($0.reason)" }
+            let more = result.rejected.count > 5 ? " and \(result.rejected.count - 5) more" : ""
+            lines.append("Couldn't read \(result.rejected.count): \(shown.joined(separator: "; "))\(more).")
+        }
+        message = lines.joined(separator: "\n\n")
     }
 }
 

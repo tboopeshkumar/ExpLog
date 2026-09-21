@@ -53,6 +53,10 @@ extension ExpenseCategory {
         "play.tv": .systemPurple,
         "airplane": .systemCyan,
         "ellipsis.circle": .systemGray,
+        // Categories created by CSV import (see CSV.symbolsForNewCategories).
+        "book": .systemMint,
+        "sofa": .systemTeal,
+        "house": .systemIndigo,
     ]
 
     private static let palette: [UIColor] = [
