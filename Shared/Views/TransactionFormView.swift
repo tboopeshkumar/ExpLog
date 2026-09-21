@@ -5,6 +5,7 @@ import SwiftData
 /// the two never drift apart.
 public struct TransactionFormView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.colorScheme) private var colorScheme
 
     @Query(filter: #Predicate<ExpenseCategory> { !$0.isArchived }, sort: \ExpenseCategory.sortOrder)
     private var categories: [ExpenseCategory]
@@ -107,7 +108,7 @@ public struct TransactionFormView: View {
                     ForEach(categories) { category in
                         // menuIcon, not systemImage: a plain symbol would be
                         // redrawn in one colour by the menu.
-                        Label { Text(category.name) } icon: { category.menuIcon }
+                        Label { Text(category.name) } icon: { category.menuIcon(for: colorScheme) }
                             .tag(ExpenseCategory?.some(category))
                     }
                 }

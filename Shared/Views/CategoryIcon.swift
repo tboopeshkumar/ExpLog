@@ -27,16 +27,19 @@ extension ExpenseCategory {
     /// The symbol pre-coloured for use inside a Picker or Menu.
     ///
     /// iOS redraws menu icons as single-colour templates, which would strip
-    /// `tint`. An image marked `.alwaysOriginal` is drawn as-is, so the colour
-    /// survives. The colour goes in as a symbol palette colour rather than a
-    /// flat tint, so its dynamic light/dark value is resolved when the menu
-    /// draws, not fixed when the image is made.
-    public var menuIcon: Image {
-        let configuration = UIImage.SymbolConfiguration(paletteColors: [uiTint])
-        let image = UIImage(systemName: symbol, withConfiguration: configuration)
-            ?? UIImage(systemName: "tag", withConfiguration: configuration)
-            ?? UIImage()
-        return Image(uiImage: image.withRenderingMode(.alwaysOriginal))
+    /// `tint`. An image tinted with `.alwaysOriginal` is drawn as-is, so the
+    /// colour survives.
+    ///
+    /// The colour is baked in with `withTintColor`, not a symbol palette:
+    /// palette colours don't reach every layer of every symbol (`fork.knife`
+    /// drew grey), and a menu can override the symbol configuration anyway.
+    /// Baking it in means resolving the light/dark value up front, so callers
+    /// pass the current colour scheme and the icon is rebuilt when it changes.
+    public func menuIcon(for colorScheme: ColorScheme) -> Image {
+        let traits = UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)
+        let color = uiTint.resolvedColor(with: traits)
+        let image = UIImage(systemName: symbol) ?? UIImage(systemName: "tag") ?? UIImage()
+        return Image(uiImage: image.withTintColor(color, renderingMode: .alwaysOriginal))
     }
 
     private static let colorsBySymbol: [String: UIColor] = [
