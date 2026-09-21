@@ -46,7 +46,7 @@ struct TransactionListView: View {
                     HStack {
                         Text(Formatting.monthTitle(month.start))
                         Spacer()
-                        Text(total(of: month.items))
+                        total(of: month.items)
                             .monospacedDigit()
                     }
                 }
@@ -83,9 +83,9 @@ struct TransactionListView: View {
         }
     }
 
-    private func total(of items: [Transaction]) -> String {
+    private func total(of items: [Transaction]) -> Text {
         let sum = items.reduce(Decimal(0)) { $0 + $1.amount }
-        return Formatting.money(sum, code: items.first?.currencyCode ?? "AED")
+        return Formatting.moneyText(sum, code: items.first?.currencyCode ?? "AED")
     }
 
     private func delete(_ offsets: IndexSet, in items: [Transaction]) {
@@ -121,7 +121,7 @@ struct TransactionRow: View {
 
             Spacer()
 
-            Text(Formatting.money(transaction.amount, code: transaction.currencyCode))
+            Formatting.moneyText(transaction.amount, code: transaction.currencyCode)
                 .monospacedDigit()
         }
         .padding(.vertical, 2)

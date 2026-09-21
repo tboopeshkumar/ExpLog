@@ -76,7 +76,7 @@ public struct TransactionFormView: View {
     private var amountSection: some View {
         Section {
             HStack {
-                Text(draft.currencyCode)
+                Formatting.currencySign(for: draft.currencyCode)
                     .foregroundStyle(.secondary)
                 TextField("0.00", value: $draft.amount, format: .number.precision(.fractionLength(0...2)))
                     .keyboardType(.decimalPad)

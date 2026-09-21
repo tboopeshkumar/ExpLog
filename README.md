@@ -185,6 +185,18 @@ That writes the 1024×1024 PNG into the asset catalog; Xcode derives the smaller
 sizes. iOS requires a full square with no alpha and no rounded corners, so the
 renderer produces exactly that and lets the system apply its own mask.
 
+## The Dirham sign
+
+Amounts in AED show the UAE Dirham sign (U+20C3) rather than "AED". No iOS 27
+font has a glyph for it — typed as text it renders as the LastResort
+placeholder box — so it's a custom SF Symbol, `Shared/Symbols.xcassets`,
+generated from the CC0 artwork on
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:UAE_Dirham_Symbol.svg)
+and scaled to the text cap height. `Formatting.moneyText` interpolates it into
+`Text`, so it takes the surrounding font size and colour. The CSV export and
+alerts still write "AED". Once iOS fonts include U+20C3, the symbol can give
+way to the plain character.
+
 ## Known gaps
 
 - No App Intents target, so no fully hands-off Shortcuts automation yet. The
