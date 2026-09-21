@@ -121,7 +121,7 @@ public struct TransactionFormView: View {
             }
         } footer: {
             if !showsCategoryAndAccount {
-                Text("Card and category are matched by ExpMgr when it opens.")
+                Text("Card and category are matched by ExpLog when it opens.")
             }
         }
     }

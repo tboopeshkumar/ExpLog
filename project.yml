@@ -1,4 +1,4 @@
-name: ExpMgr
+name: ExpLog
 
 options:
   bundleIdPrefix: com.boopeshkumar
@@ -21,7 +21,7 @@ settings:
 
 targets:
 
-  ExpMgr:
+  ExpLog:
     type: application
     platform: iOS
     sources:
@@ -33,36 +33,36 @@ targets:
         embed: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.boopeshkumar.expmgr
-        PRODUCT_NAME: ExpMgr
+        PRODUCT_BUNDLE_IDENTIFIER: com.boopeshkumar.explog
+        PRODUCT_NAME: ExpLog
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: ExpMgr
+        CFBundleDisplayName: ExpLog
         CFBundleShortVersionString: $(MARKETING_VERSION)
         UILaunchScreen: {}
         # How the share extension reaches the app when there's no App Group.
         CFBundleURLTypes:
-          - CFBundleURLName: com.boopeshkumar.expmgr
+          - CFBundleURLName: com.boopeshkumar.explog
             CFBundleURLSchemes:
-              - expmgr
+              - explog
     # App Group — commented out because it requires a paid Apple Developer
     # Program membership. With a free Apple ID, leaving it in makes the build
     # fail: "provisioning profile does not support the App Groups capability".
     # Without it the app still works; the extension hands transactions over
-    # through expmgr:// instead (see Shared/TransactionLink.swift).
+    # through explog:// instead (see Shared/TransactionLink.swift).
     #
     # After enrolling, uncomment this block AND the matching one on
     # ShareExtension below, then re-run `xcodegen generate`.
     #
     # entitlements:
-    #   path: App/ExpMgr.entitlements
+    #   path: App/ExpLog.entitlements
     #   properties:
     #     com.apple.security.application-groups:
-    #       - group.com.boopeshkumar.expmgr
+    #       - group.com.boopeshkumar.explog
 
   ShareExtension:
     type: app-extension
@@ -72,7 +72,7 @@ targets:
       - path: Shared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.boopeshkumar.expmgr.share
+        PRODUCT_BUNDLE_IDENTIFIER: com.boopeshkumar.explog.share
         # Distinct from the app's module name — sharing one would collide in the
         # build products. The name shown in the share sheet comes from
         # CFBundleDisplayName below, not from here.
@@ -81,7 +81,7 @@ targets:
     info:
       path: ShareExtension/Info.plist
       properties:
-        CFBundleDisplayName: ExpMgr
+        CFBundleDisplayName: ExpLog
         CFBundleShortVersionString: $(MARKETING_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
@@ -97,4 +97,4 @@ targets:
     #   path: ShareExtension/ShareExtension.entitlements
     #   properties:
     #     com.apple.security.application-groups:
-    #       - group.com.boopeshkumar.expmgr
+    #       - group.com.boopeshkumar.explog

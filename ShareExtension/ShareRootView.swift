@@ -1,14 +1,14 @@
 import SwiftUI
 import SwiftData
 
-/// What you see after tapping Share → ExpMgr on a bank SMS: the parsed
+/// What you see after tapping Share → ExpLog on a bank SMS: the parsed
 /// transaction, pre-filled and editable.
 ///
 /// Two ways of saving, depending on the Apple account:
 ///
 /// - **App Group available** (paid Developer Program): writes straight into the
 ///   shared database and dismisses. The app never launches.
-/// - **No App Group** (free Apple ID): opens `expmgr://add?...` and the app
+/// - **No App Group** (free Apple ID): opens `explog://add?...` and the app
 ///   saves it. One extra app switch, no retyping either way.
 struct ShareRootView: View {
     let sharedText: String
@@ -70,7 +70,7 @@ struct ShareRootView: View {
         ContentUnavailableView {
             Label("Couldn't read that message", systemImage: "text.badge.xmark")
         } description: {
-            Text("No transaction amount was found. You can still log it by hand in ExpMgr.")
+            Text("No transaction amount was found. You can still log it by hand in ExpLog.")
         } actions: {
             Button("Enter manually") {
                 let manual = TransactionDraft()
@@ -83,9 +83,9 @@ struct ShareRootView: View {
 
     private var handoffFailedView: some View {
         ContentUnavailableView {
-            Label("Couldn't open ExpMgr", systemImage: "arrow.up.forward.app")
+            Label("Couldn't open ExpLog", systemImage: "arrow.up.forward.app")
         } description: {
-            Text("iOS wouldn't switch to ExpMgr from here. Open ExpMgr and add this one by hand — the message is still in Messages.")
+            Text("iOS wouldn't switch to ExpLog from here. Open ExpLog and add this one by hand — the message is still in Messages.")
         } actions: {
             Button("Close", action: onCancel)
         }
@@ -125,7 +125,7 @@ struct ShareRootView: View {
         case couldNotBuildURL
 
         var errorDescription: String? {
-            "Couldn't prepare this transaction to send to ExpMgr."
+            "Couldn't prepare this transaction to send to ExpLog."
         }
     }
 }

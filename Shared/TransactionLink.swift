@@ -5,11 +5,11 @@ import SwiftData
 ///
 /// Only used when there is no App Group — that is, on a free Apple ID, where
 /// the two targets cannot share a database. The extension parses the SMS and
-/// shows the form as usual, then opens `expmgr://add?...` and the app does the
+/// shows the form as usual, then opens `explog://add?...` and the app does the
 /// saving, including the card and category lookups the extension can't perform
 /// against a database it cannot see.
 public enum TransactionLink {
-    public static let scheme = "expmgr"
+    public static let scheme = "explog"
     public static let host = "add"
 
     private enum Key {

@@ -10,17 +10,18 @@ import UniformTypeIdentifiers
 // The icon is drawn in code rather than stored as a binary blob, so colours and
 // proportions can be changed here and re-rendered. iOS requires a full square
 // with no alpha and no rounded corners — the system applies its own mask.
+//
+// A receipt with a check through it: the expense, and the fact that it's been
+// logged. No currency symbol, since the parser is deliberately multi-currency.
 
 let size = 1024.0
 
 // MARK: - Palette
 
-/// Deep green through to a brighter mint. Money without resorting to a currency
-/// symbol, which wouldn't survive being multi-currency anyway.
-let gradientTop = CGColor(red: 0.27, green: 0.84, blue: 0.60, alpha: 1)
-let gradientBottom = CGColor(red: 0.04, green: 0.35, blue: 0.29, alpha: 1)
-let bubbleColor = CGColor(red: 1, green: 1, blue: 1, alpha: 1)
-let markColor = CGColor(red: 0.05, green: 0.30, blue: 0.25, alpha: 1)
+let gradientStart = CGColor(red: 0.09, green: 0.78, blue: 0.58, alpha: 1)
+let gradientEnd = CGColor(red: 0.02, green: 0.28, blue: 0.24, alpha: 1)
+let paperColor = CGColor(red: 1, green: 1, blue: 1, alpha: 1)
+let markColor = CGColor(red: 0.04, green: 0.30, blue: 0.24, alpha: 1)
 
 // MARK: - Context
 
@@ -32,7 +33,7 @@ guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
         bitsPerComponent: 8,
         bytesPerRow: 0,
         space: colorSpace,
-        // No alpha: the App Store and iOS both reject icons with transparency.
+        // No alpha: iOS and the App Store both reject icons with transparency.
         bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
       )
 else {
@@ -47,7 +48,7 @@ context.interpolationQuality = .high
 
 if let gradient = CGGradient(
     colorsSpace: colorSpace,
-    colors: [gradientTop, gradientBottom] as CFArray,
+    colors: [gradientStart, gradientEnd] as CFArray,
     locations: [0, 1]
 ) {
     context.drawLinearGradient(
@@ -58,33 +59,54 @@ if let gradient = CGGradient(
     )
 }
 
-// MARK: - Speech bubble
+// MARK: - Receipt
 
-// The message the expense comes from. Drawn as one path — body and tail — so
-// the fill has no seam where they meet.
-let body = CGRect(x: 232, y: 400, width: 560, height: 440)
-let bubble = CGMutablePath()
-bubble.addRoundedRect(in: body, cornerWidth: 132, cornerHeight: 132)
-// A broad base, so the tail reads as part of the bubble rather than a spike.
-bubble.move(to: CGPoint(x: 356, y: 470))
-bubble.addLine(to: CGPoint(x: 300, y: 250))
-bubble.addLine(to: CGPoint(x: 548, y: 430))
-bubble.closeSubpath()
+let left = 300.0
+let right = 724.0
+let top = 796.0
+let tearLine = 332.0      // where the straight body ends
+let tearDepth = 54.0      // how far the teeth drop below it
+let corner = 52.0
+let teeth = 6
 
-context.setFillColor(bubbleColor)
-context.addPath(bubble)
+let receipt = CGMutablePath()
+receipt.move(to: CGPoint(x: left, y: tearLine))
+receipt.addLine(to: CGPoint(x: left, y: top - corner))
+receipt.addArc(
+    tangent1End: CGPoint(x: left, y: top),
+    tangent2End: CGPoint(x: left + corner, y: top),
+    radius: corner
+)
+receipt.addLine(to: CGPoint(x: right - corner, y: top))
+receipt.addArc(
+    tangent1End: CGPoint(x: right, y: top),
+    tangent2End: CGPoint(x: right, y: top - corner),
+    radius: corner
+)
+receipt.addLine(to: CGPoint(x: right, y: tearLine))
+
+// Torn bottom edge, walked right to left: down to a point, back up, repeat.
+let toothWidth = (right - left) / Double(teeth)
+for index in 0..<teeth {
+    let start = right - Double(index) * toothWidth
+    receipt.addLine(to: CGPoint(x: start - toothWidth / 2, y: tearLine - tearDepth))
+    receipt.addLine(to: CGPoint(x: start - toothWidth, y: tearLine))
+}
+receipt.closeSubpath()
+
+context.setFillColor(paperColor)
+context.addPath(receipt)
 context.fillPath()
 
 // MARK: - Checkmark
 
-// "Logged" — the whole point of the app is that the message becomes a record.
 context.setStrokeColor(markColor)
-context.setLineWidth(84)
+context.setLineWidth(92)
 context.setLineCap(.round)
 context.setLineJoin(.round)
-context.move(to: CGPoint(x: 400, y: 622))
-context.addLine(to: CGPoint(x: 486, y: 532))
-context.addLine(to: CGPoint(x: 644, y: 712))
+context.move(to: CGPoint(x: 398, y: 566))
+context.addLine(to: CGPoint(x: 486, y: 474))
+context.addLine(to: CGPoint(x: 648, y: 658))
 context.strokePath()
 
 // MARK: - Write

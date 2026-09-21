@@ -22,7 +22,7 @@ enum CSVExporter {
             lines.append(fields.map(escape).joined(separator: ","))
         }
 
-        let name = "ExpMgr-\(formatter.string(from: .now)).csv"
+        let name = "ExpLog-\(formatter.string(from: .now)).csv"
         let url = FileManager.default.temporaryDirectory.appending(path: name)
         try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
         return url

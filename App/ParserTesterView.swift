@@ -20,7 +20,7 @@ struct ParserTesterView: View {
 
             if text.isEmpty {
                 Section {
-                    Text("Paste a message to see the fields ExpMgr can read from it.")
+                    Text("Paste a message to see the fields ExpLog can read from it.")
                         .foregroundStyle(.secondary)
                 }
             } else if let parsed {

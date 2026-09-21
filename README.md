@@ -1,7 +1,7 @@
-# ExpMgr
+# ExpLog
 
 Expense logging for iOS, built around one idea: select a bank SMS in Messages,
-tap Share, tap ExpMgr, and the expense is logged. No retyping.
+tap Share, tap ExpLog, and the expense is logged. No retyping.
 
 ## How it works
 
@@ -9,21 +9,21 @@ Two targets and one database:
 
 | Piece | Job |
 |---|---|
-| `ExpMgr` (app) | Transaction list, monthly totals, editing, cards, categories, CSV export |
+| `ExpLog` (app) | Transaction list, monthly totals, editing, cards, categories, CSV export |
 | `ShareExtension` | Receives the SMS from the share sheet, parses it, shows a pre-filled form |
 
-From Messages it's: long-press the SMS → Share → ExpMgr → check the form → Save.
+From Messages it's: long-press the SMS → Share → ExpLog → check the form → Save.
 
 ### Two ways of saving
 
 Apple restricts **App Groups** — the shared container two targets use to read
-one database — to paid Developer Program members. ExpMgr works either way and
+one database — to paid Developer Program members. ExpLog works either way and
 picks the route at runtime, in `SharedStore.isAppGroupAvailable`:
 
 | | Paid account | Free Apple ID |
 |---|---|---|
 | Store | One database in the App Group | The app's own container |
-| On Save | Extension writes it directly | Extension opens `expmgr://add?…`, the app saves it |
+| On Save | Extension writes it directly | Extension opens `explog://add?…`, the app saves it |
 | App launches? | No | Yes, briefly |
 | Card + category prefill | In the form | Applied by the app on receipt |
 
@@ -96,15 +96,15 @@ brew install xcodegen
 ```
 
 ```bash
-xcodegen generate && open ExpMgr.xcodeproj
+xcodegen generate && open ExpLog.xcodeproj
 ```
 
 Then in Xcode:
 
-1. Select the **ExpMgr** target → Signing & Capabilities → pick your team.
+1. Select the **ExpLog** target → Signing & Capabilities → pick your team.
 2. Do the same for the **ShareExtension** target.
 
-Bundle identifiers are `com.boopeshkumar.expmgr` and `.share`. They only have to
+Bundle identifiers are `com.boopeshkumar.explog` and `.share`. They only have to
 be globally unique — change them in `project.yml` and re-run `xcodegen generate`
 if you'd rather use a domain you own. If you change the App Group ID, change it
 in all three places: `project.yml` (both targets) and `SharedStore.appGroupID`.
@@ -115,7 +115,7 @@ Build and run. Press ⌘R.
 
 - **Free Apple ID** — works. The build expires after 7 days and has to be
   re-run from Xcode, and App Groups aren't available, so the extension takes the
-  `expmgr://` route described above. Xcode will show an App Group provisioning
+  `explog://` route described above. Xcode will show an App Group provisioning
   error on the Signing pane; the app still builds and runs, and handles it at
   runtime.
 - **Apple Developer Program ($99/yr)** — builds last a year, the App Group
@@ -156,7 +156,7 @@ Xcode 27 no longer ships `Simulator.app` (it's `DeviceHub.app` now), and if
 instead of changing it globally:
 
 ```bash
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project ExpMgr.xcodeproj -scheme ExpMgr -destination 'name=iPhone 17 Pro' CODE_SIGN_IDENTITY='-' build
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project ExpLog.xcodeproj -scheme ExpLog -destination 'name=iPhone 17 Pro' CODE_SIGN_IDENTITY='-' build
 ```
 
 Note `CODE_SIGN_IDENTITY='-'` rather than `CODE_SIGNING_ALLOWED=NO`. Disabling
@@ -193,7 +193,7 @@ renderer produces exactly that and lets the system apply its own mask.
 - No budgets, recurring transactions, or reports. Out of MVP scope by choice.
 - The share sheet flow has not been exercised through the UI — the extension is
   built, embedded and registered for text, and everything it does on Save is
-  covered by `check-store.sh`, but nobody has yet tapped Share → ExpMgr on a
+  covered by `check-store.sh`, but nobody has yet tapped Share → ExpLog on a
   real message. That's the first thing to try on a device.
 - On the free-account route, `NSExtensionContext.open` is the documented way for
   an extension to launch its containing app, but it has not been exercised on a

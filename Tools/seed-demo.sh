@@ -5,17 +5,17 @@ set -e
 cd "$(dirname "$0")/.."
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 SIM="${1:?usage: seed-demo.sh <simulator-udid>}"
-APP_ID="com.boopeshkumar.expmgr"
+APP_ID="com.boopeshkumar.explog"
 
 # Prefer the App Group container; fall back to the app's own, which is where the
 # store lives when App Groups aren't available (free Apple ID).
 GROUP=$(xcrun simctl get_app_container "$SIM" "$APP_ID" groups 2>/dev/null | head -1 | awk '{print $2}' || true)
 if [ -n "$GROUP" ] && [ -d "$GROUP" ]; then
-    STORE="$GROUP/ExpMgr.store"
+    STORE="$GROUP/ExpLog.store"
 else
     DATA=$(xcrun simctl get_app_container "$SIM" "$APP_ID" data)
     mkdir -p "$DATA/Library/Application Support"
-    STORE="$DATA/Library/Application Support/ExpMgr.store"
+    STORE="$DATA/Library/Application Support/ExpLog.store"
 fi
 
 mkdir -p .build

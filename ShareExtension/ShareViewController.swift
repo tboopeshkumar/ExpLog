@@ -93,7 +93,7 @@ final class ShareViewController: UIViewController {
     }
 
     private func cancel() {
-        extensionContext?.cancelRequest(withError: NSError(domain: "com.expmgr.share", code: 0))
+        extensionContext?.cancelRequest(withError: NSError(domain: "com.explog.share", code: 0))
     }
 }
 
@@ -104,7 +104,7 @@ private struct ShareErrorView: View {
     var body: some View {
         NavigationStack {
             ContentUnavailableView {
-                Label("ExpMgr isn't set up", systemImage: "exclamationmark.triangle")
+                Label("ExpLog isn't set up", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             }

@@ -26,7 +26,7 @@ func run() throws {
 
     // A fresh on-disk store, standing in for the App Group container.
     let storeURL = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appending(path: "ExpMgrCheck-\(UUID().uuidString).store")
+        .appending(path: "ExpLogCheck-\(UUID().uuidString).store")
     let configuration = ModelConfiguration(schema: SharedStoreSchema.schema, url: storeURL)
     let container = try ModelContainer(for: SharedStoreSchema.schema, configurations: [configuration])
     let context = ModelContext(container)
@@ -49,7 +49,7 @@ func run() throws {
     // Anonymised, like the parser fixtures — see Tools/ParserCheck/main.swift.
     let supermarket = "Dear Alex Morgan!  Cardholder, Your card XXXX4417 was used at MEGA CENTER RIVERTON XYZ for AED  30.02 on deferred payment basis on 20-Sep ref R77315. As per the agreement we confirm our acceptance to sell to you at the agreed price. Available Balance on your card is AED XXXX.  Regards, Crescent Finance."
 
-    print("\nFIRST SAVE  (what happens on Share → ExpMgr → Save)\n")
+    print("\nFIRST SAVE  (what happens on Share → ExpLog → Save)\n")
 
     guard let parsed = SMSParser.parse(supermarket) else {
         print("  ✗ parser returned nil — cannot continue")
@@ -114,7 +114,7 @@ func run() throws {
         print("  ✗ could not build a link")
         exit(1)
     }
-    expect(link.scheme == "expmgr" && link.host == "add", "link is expmgr://add", link.absoluteString)
+    expect(link.scheme == "explog" && link.host == "add", "link is explog://add", link.absoluteString)
 
     guard let incoming = TransactionLink.draft(from: link, context: context) else {
         print("  ✗ link did not decode")
@@ -132,10 +132,10 @@ func run() throws {
     expect(incoming.account === card, "app matches card ••4417 on receipt")
     expect(incoming.category === groceries, "app applies the learned category on receipt")
 
-    expect(TransactionLink.draft(from: URL(string: "expmgr://add?merchant=Nothing")!, context: context) == nil,
+    expect(TransactionLink.draft(from: URL(string: "explog://add?merchant=Nothing")!, context: context) == nil,
            "a link with no amount is rejected")
     expect(TransactionLink.draft(from: URL(string: "https://example.com/add?amount=5")!, context: context) == nil,
-           "a non-expmgr URL is rejected")
+           "a non-explog URL is rejected")
 
     print("")
     if failures == 0 {

@@ -35,7 +35,7 @@ struct SettingsView: View {
                     Label("Test message parsing", systemImage: "text.magnifyingglass")
                 }
             } footer: {
-                Text("Paste a bank SMS to see exactly which fields ExpMgr reads from it.")
+                Text("Paste a bank SMS to see exactly which fields ExpLog reads from it.")
             }
         }
         .navigationTitle("Settings")

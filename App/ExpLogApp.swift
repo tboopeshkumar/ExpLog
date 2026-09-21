@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 @main
-struct ExpMgrApp: App {
+struct ExpLogApp: App {
     var body: some Scene {
         WindowGroup {
             switch SharedStore.shared {
@@ -44,7 +44,7 @@ struct RootView: View {
         }
     }
 
-    /// Handles `expmgr://add?...` from the share extension — the path taken when
+    /// Handles `explog://add?...` from the share extension — the path taken when
     /// there's no App Group, so the extension can't write to the database
     /// itself. See TransactionLink.
     private func receive(_ url: URL) {

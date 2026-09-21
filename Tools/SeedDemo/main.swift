@@ -10,7 +10,7 @@ import SwiftData
 
 let storePath = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : ""
 guard !storePath.isEmpty else {
-    print("usage: seeddemo <path-to-ExpMgr.store>")
+    print("usage: seeddemo <path-to-ExpLog.store>")
     exit(1)
 }
 
