@@ -241,6 +241,46 @@ func run() throws {
     expect(faresAgain.added == 0 && faresAgain.duplicates == 2,
            "…and re-importing that file adds neither", "\(faresAgain)")
 
+    print("\nEDITING CARDS\n")
+
+    expect(AccountEditing.sanitizedDigits("xx 44-1 7 99") == "4417", "typing keeps only the first four digits")
+    expect(AccountEditing.last4(from: "") == .none, "no digits is allowed (cash, bank accounts)")
+    expect(AccountEditing.last4(from: "44") == .incomplete, "two digits isn't enough")
+    expect(AccountEditing.last4(from: "4417") == .digits("4417"), "four digits accepted")
+    expect(AccountEditing.last4(from: "٤٤١٧") == .none, "non-ASCII digits don't slip through as card digits")
+
+    // An imported account with just a name, and the account ExpLog made on its
+    // own when an SMS named card 5555 — the same card, twice.
+    let imported = Account(name: "Imported Bank")
+    let automatic = Account(name: "Card 5555", last4: "5555")
+    fresh.insert(imported)
+    fresh.insert(automatic)
+    fresh.insert(Transaction(amount: 10, date: day(8, 1), merchant: "Old", account: imported))
+    fresh.insert(Transaction(amount: 20, date: day(8, 2), merchant: "From SMS", account: automatic))
+    fresh.insert(Transaction(amount: 30, date: day(8, 3), merchant: "From SMS too", account: automatic))
+    try fresh.save()
+
+    expect(AccountEditing.owner(of: "5555", excluding: imported, in: fresh) === automatic,
+           "typing 5555 on the imported account finds the clash")
+    expect(AccountEditing.owner(of: "5555", excluding: automatic, in: fresh) == nil,
+           "an account doesn't clash with itself")
+
+    imported.last4 = "5555"
+    try AccountEditing.merge(automatic, into: imported, in: fresh)
+    let accountsAfter = try fresh.fetch(FetchDescriptor<Account>())
+    expect(!accountsAfter.contains { $0.name == "Card 5555" }, "the duplicate account is removed")
+    expect(imported.transactions?.count == 3, "its expenses move to the kept account",
+           "\(imported.transactions?.count ?? 0)")
+    expect(TransactionDraft.account(withLast4: "5555", in: fresh) === imported,
+           "the next SMS from card 5555 matches the kept account")
+
+    let bare = Account(name: "No digits yet")
+    let digitsOnly = Account(name: "Card 6666", last4: "6666")
+    fresh.insert(bare)
+    fresh.insert(digitsOnly)
+    try AccountEditing.merge(digitsOnly, into: bare, in: fresh)
+    expect(bare.last4 == "6666", "merging into an account without digits adopts the other's")
+
     do {
         _ = try CSV.importRows(from: "Name,Value\nx,1\n", into: fresh)
         expect(false, "a non-ExpLog CSV is refused")

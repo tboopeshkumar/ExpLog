@@ -133,43 +133,204 @@ struct AccountsView: View {
 
     @State private var name = ""
     @State private var last4 = ""
+    @State private var editing: Account?
+
+    /// Another card already using the digits typed in the Add section.
+    private var takenBy: Account? {
+        guard case .digits(let digits) = AccountEditing.last4(from: last4) else { return nil }
+        return AccountEditing.owner(of: digits, in: context)
+    }
+
+    private var canAdd: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+            && AccountEditing.last4(from: last4) != .incomplete
+            && takenBy == nil
+    }
 
     var body: some View {
         List {
-            Section("Add") {
+            Section {
                 TextField("Name (e.g. Crescent Credit)", text: $name)
                 TextField("Last 4 digits", text: $last4)
                     .keyboardType(.numberPad)
-                Button("Add card") {
-                    let account = Account(
-                        name: name.trimmingCharacters(in: .whitespaces),
-                        last4: last4.isEmpty ? nil : last4
-                    )
-                    context.insert(account)
-                    try? context.save()
-                    name = ""
-                    last4 = ""
+                    .onChange(of: last4) { _, typed in last4 = AccountEditing.sanitizedDigits(typed) }
+                Button("Add card", action: add)
+                    .disabled(!canAdd)
+            } header: {
+                Text("Add")
+            } footer: {
+                if let takenBy {
+                    Text("••\(last4) is already on “\(takenBy.name)”. Tap it below to edit instead.")
+                        .foregroundStyle(.orange)
                 }
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
 
-            Section("Cards") {
+            Section {
                 ForEach(accounts) { account in
-                    HStack {
-                        Text(account.name)
-                        Spacer()
-                        if let digits = account.last4 {
-                            Text("••\(digits)").foregroundStyle(.secondary).monospacedDigit()
-                        }
+                    Button {
+                        editing = account
+                    } label: {
+                        AccountRow(account: account)
                     }
+                    .foregroundStyle(.primary)
                 }
                 .onDelete { offsets in
                     for index in offsets { context.delete(accounts[index]) }
                     try? context.save()
                 }
+            } header: {
+                Text("Cards")
+            } footer: {
+                Text("A card's last four digits are how its SMS alerts find it. Tap a card to add or change them.")
             }
         }
         .navigationTitle("Cards & accounts")
+        .sheet(item: $editing) { account in
+            NavigationStack { AccountEditor(account: account) }
+        }
+    }
+
+    private func add() {
+        var digits: String?
+        if case .digits(let typed) = AccountEditing.last4(from: last4) { digits = typed }
+        context.insert(Account(name: name.trimmingCharacters(in: .whitespaces), last4: digits))
+        try? context.save()
+        name = ""
+        last4 = ""
+    }
+}
+
+private struct AccountRow: View {
+    let account: Account
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(account.name)
+                Group {
+                    if let digits = account.last4 {
+                        Text("••\(digits)").monospacedDigit()
+                    } else {
+                        Text("No card digits")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+            let count = account.transactions?.count ?? 0
+            Text(count == 1 ? "1 expense" : "\(count) expenses")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Rename a card and set the four digits its SMS alerts show.
+private struct AccountEditor: View {
+    let account: Account
+
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var name: String
+    @State private var last4: String
+    /// Set when the digits already belong to another account, pending a merge.
+    @State private var conflict: Account?
+
+    init(account: Account) {
+        self.account = account
+        _name = State(initialValue: account.name)
+        _last4 = State(initialValue: account.last4 ?? "")
+    }
+
+    private var parsedDigits: AccountEditing.Last4 { AccountEditing.last4(from: last4) }
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
+
+    private var canSave: Bool {
+        !trimmedName.isEmpty && parsedDigits != .incomplete
+    }
+
+    var body: some View {
+        Form {
+            Section("Name") {
+                TextField("Name", text: $name)
+                    .textInputAutocapitalization(.words)
+            }
+
+            Section {
+                TextField("Last 4 digits", text: $last4)
+                    .keyboardType(.numberPad)
+                    .monospacedDigit()
+                    .onChange(of: last4) { _, typed in last4 = AccountEditing.sanitizedDigits(typed) }
+            } header: {
+                Text("Card digits")
+            } footer: {
+                if parsedDigits == .incomplete {
+                    Text("Enter all four digits.")
+                        .foregroundStyle(.orange)
+                } else {
+                    Text("The last four digits as they appear in the card's SMS alerts — 1442 for XXXX1442. Leave empty for cash or accounts without SMS.")
+                }
+            }
+
+            Section {
+                LabeledContent("Expenses", value: "\(account.transactions?.count ?? 0)")
+            }
+        }
+        .navigationTitle("Edit card")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save", action: save).disabled(!canSave)
+            }
+        }
+        .confirmationDialog(
+            conflict.map { "••\(last4) is already on “\($0.name)”" } ?? "",
+            isPresented: Binding(get: { conflict != nil }, set: { if !$0 { conflict = nil } }),
+            titleVisibility: .visible,
+            presenting: conflict
+        ) { other in
+            Button("Merge into “\(trimmedName)”") { apply(merging: other) }
+            Button("Cancel", role: .cancel) { conflict = nil }
+        } message: { other in
+            let count = other.transactions?.count ?? 0
+            Text("They're the same card. \(count == 1 ? "Its 1 expense moves" : "Its \(count) expenses move") here and “\(other.name)” is removed.")
+        }
+    }
+
+    private func save() {
+        if case .digits(let digits) = parsedDigits,
+           let other = AccountEditing.owner(of: digits, excluding: account, in: context) {
+            conflict = other
+            return
+        }
+        apply(merging: nil)
+    }
+
+    private func apply(merging other: Account?) {
+        account.name = trimmedName
+        if case .digits(let digits) = parsedDigits {
+            account.last4 = digits
+        } else {
+            account.last4 = nil
+        }
+        do {
+            if let other {
+                try AccountEditing.merge(other, into: account, in: context)
+            } else {
+                try context.save()
+            }
+        } catch {
+            // Leave the sheet open with the edit still in place.
+            conflict = nil
+            return
+        }
+        conflict = nil
+        dismiss()
     }
 }
 
