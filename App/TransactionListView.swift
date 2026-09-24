@@ -9,6 +9,7 @@ struct TransactionListView: View {
 
     @State private var editing: TransactionDraft?
     @State private var searchText = ""
+    @State private var showsUpcoming = false
 
     private var filtered: [Transaction] {
         guard !searchText.isEmpty else { return transactions }
@@ -21,36 +22,37 @@ struct TransactionListView: View {
     }
 
     /// Newest month first, transactions already in reverse date order.
-    private var months: [(start: Date, items: [Transaction])] {
-        Dictionary(grouping: filtered) { Formatting.monthStart($0.date) }
+    private func months(_ items: [Transaction]) -> [(start: Date, items: [Transaction])] {
+        Dictionary(grouping: items) { Formatting.monthStart($0.date) }
             .map { (start: $0.key, items: $0.value) }
             .sorted { $0.start > $1.start }
     }
 
     var body: some View {
+        // Future-dated expenses — instalments imported ahead of time — sit in
+        // a collapsed Upcoming group, so the list opens on this month's actual
+        // spending rather than on next year's plan. A search shows them all.
+        let now = Date.now
+        let upcoming = filtered.filter { $0.date > now }
+        let past = filtered.filter { $0.date <= now }
+        let expandUpcoming = showsUpcoming || !searchText.isEmpty
+
         List {
-            ForEach(months, id: \.start) { month in
+            if !upcoming.isEmpty {
                 Section {
-                    ForEach(month.items) { transaction in
-                        Button {
-                            editing = TransactionDraft(editing: transaction)
-                        } label: {
-                            TransactionRow(transaction: transaction)
-                        }
-                        .buttonStyle(.plain)
+                    Button {
+                        withAnimation { showsUpcoming.toggle() }
+                    } label: {
+                        UpcomingRow(items: upcoming, expanded: expandUpcoming)
                     }
-                    .onDelete { offsets in
-                        delete(offsets, in: month.items)
-                    }
-                } header: {
-                    HStack {
-                        Text(Formatting.monthTitle(month.start))
-                        Spacer()
-                        total(of: month.items)
-                            .monospacedDigit()
-                    }
+                    .buttonStyle(.plain)
+                    .disabled(!searchText.isEmpty)
+                }
+                if expandUpcoming {
+                    monthSections(months(upcoming))
                 }
             }
+            monthSections(months(past))
         }
         .navigationTitle("Expenses")
         .searchable(text: $searchText, prompt: "Merchant, note or category")
@@ -79,6 +81,31 @@ struct TransactionListView: View {
                 )
                 .navigationTitle("Expense")
                 .navigationBarTitleDisplayMode(.inline)
+            }
+        }
+    }
+
+    private func monthSections(_ months: [(start: Date, items: [Transaction])]) -> some View {
+        ForEach(months, id: \.start) { month in
+            Section {
+                ForEach(month.items) { transaction in
+                    Button {
+                        editing = TransactionDraft(editing: transaction)
+                    } label: {
+                        TransactionRow(transaction: transaction)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .onDelete { offsets in
+                    delete(offsets, in: month.items)
+                }
+            } header: {
+                HStack {
+                    Text(Formatting.monthTitle(month.start))
+                    Spacer()
+                    total(of: month.items)
+                        .monospacedDigit()
+                }
             }
         }
     }
@@ -132,4 +159,42 @@ struct TransactionRow: View {
 
 extension TransactionDraft: Identifiable {
     public var id: ObjectIdentifier { ObjectIdentifier(self) }
+}
+
+/// The collapsed stand-in for future-dated expenses: how many, how much, and
+/// how far ahead.
+private struct UpcomingRow: View {
+    let items: [Transaction]
+    let expanded: Bool
+
+    var body: some View {
+        let total = items.reduce(Decimal(0)) { $0 + $1.amount }
+        let dates = items.map(\.date)
+        HStack(spacing: 12) {
+            Image(systemName: "calendar.badge.clock")
+                .font(.system(size: 16))
+                .foregroundStyle(.secondary)
+                .frame(width: 32, height: 32)
+                .background(.quaternary, in: .rect(cornerRadius: 9))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Upcoming · \(items.count)")
+                if let last = dates.max() {
+                    Text("Until \(last.formatted(.dateTime.month(.abbreviated).year()))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Formatting.moneyText(total, code: items.first?.currencyCode ?? "AED")
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .rotationEffect(.degrees(expanded ? 90 : 0))
+        }
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(expanded ? "Hides future expenses" : "Shows future expenses")
+    }
 }
