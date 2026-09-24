@@ -395,6 +395,70 @@ func run() throws {
     expect(!(try fresh.fetch(FetchDescriptor<ExpenseSubcategory>())).contains { $0.name == "Schooling" },
            "deleting a category takes its subcategories with it")
 
+    print("\nFILLING SUBCATEGORIES ON RE-IMPORT\n")
+
+    // As first imported: subcategory written into the note, no column.
+    let before = """
+    Date,Amount,Currency,Merchant,Category,Account,Note,Reference
+    2026-05-01T08:00:00,13.00,AED,Fare,Transport,,Taxi,
+    2026-05-01T08:00:05,13.00,AED,Fare,Transport,,Taxi,
+    2026-05-02T12:00:00,4.00,AED,Canteen,Dining,,Lunch · INR 100.00,
+    2026-05-03T12:00:00,9.00,AED,Moved,Transport,,Taxi,
+    2026-05-04T12:00:00,6.00,AED,Already set,Transport,,,
+    """
+    _ = try CSV.importRows(from: before, into: fresh)
+    let storedAs = { (merchant: String) in try fresh.fetch(FetchDescriptor<Transaction>()).filter { $0.merchant == merchant } }
+    // Edits made in the app since: one recategorised, one given a subcategory.
+    try storedAs("Moved").first!.category = fresh.fetch(FetchDescriptor<ExpenseCategory>()).first { $0.name == "Travel" }
+    try storedAs("Already set").first!.subcategory = taxi
+    try fresh.save()
+
+    // The same data again, with the column.
+    let after = """
+    Date,Amount,Currency,Merchant,Category,Account,Note,Reference,Subcategory
+    2026-05-01T08:00:00,13.00,AED,Fare,Transport,,,,Taxi
+    2026-05-01T08:00:05,13.00,AED,Fare,Transport,,,,Taxi
+    2026-05-02T12:00:00,4.00,AED,Canteen,Dining,,INR 100.00,,Lunch
+    2026-05-03T12:00:00,9.00,AED,Moved,Transport,,,,Taxi
+    2026-05-04T12:00:00,6.00,AED,Already set,Transport,,,,Metro
+    """
+    let refill = try CSV.importRows(from: after, into: fresh)
+    expect(refill.added == 0 && refill.duplicates == 5, "nothing is added twice", "\(refill)")
+    expect(refill.filledSubcategories == 3, "missing subcategories filled in", "\(refill.filledSubcategories)")
+    expect(try storedAs("Fare").allSatisfy { $0.subcategory?.name == "Taxi" }, "both of an identical pair get theirs")
+    expect(try storedAs("Fare").allSatisfy { $0.note.isEmpty }, "the note copy of the subcategory is removed")
+    expect(try storedAs("Canteen").first?.subcategory?.name == "Lunch"
+               && storedAs("Canteen").first?.note == "INR 100.00",
+           "…and the rest of the note is kept")
+    expect(try storedAs("Moved").first?.subcategory == nil && storedAs("Moved").first?.note == "Taxi",
+           "a recategorised expense is left as edited")
+    expect(try storedAs("Already set").first?.subcategory === taxi, "an existing subcategory isn't overwritten")
+
+    let refillAgain = try CSV.importRows(from: after, into: fresh)
+    expect(refillAgain.added == 0 && refillAgain.filledSubcategories == 0, "running it again changes nothing")
+    // Two near-identical expenses where only the later one had a subcategory
+    // in the source: it must land on that one, and a second run must not
+    // move on to the other.
+    let pairBefore = """
+    Date,Amount,Currency,Merchant,Category,Account,Note,Reference
+    2026-04-01T08:00:00,11.00,AED,Twin,Transport,,,
+    2026-04-01T08:00:05,11.00,AED,Twin,Transport,,Taxi,
+    """
+    let pairAfter = """
+    Date,Amount,Currency,Merchant,Category,Account,Note,Reference,Subcategory
+    2026-04-01T08:00:00,11.00,AED,Twin,Transport,,,,
+    2026-04-01T08:00:05,11.00,AED,Twin,Transport,,,,Taxi
+    """
+    _ = try CSV.importRows(from: pairBefore, into: fresh)
+    let pairFill = try CSV.importRows(from: pairAfter, into: fresh)
+    let twins = try storedAs("Twin").sorted { $0.date < $1.date }
+    expect(pairFill.filledSubcategories == 1 && twins[0].subcategory == nil && twins[1].subcategory?.name == "Taxi",
+           "the subcategory lands on the row's own twin, by time")
+    expect(try CSV.importRows(from: pairAfter, into: fresh).filledSubcategories == 0,
+           "…and a second run doesn't move on to the other")
+    expect(CSV.removingNotePart("taxi", from: "Airport · Taxi") == "Airport", "note parts match ignoring case")
+    expect(CSV.removingNotePart("Taxi", from: "Taxi rank") == "Taxi rank", "only whole parts are removed")
+
     do {
         _ = try CSV.importRows(from: "Name,Value\nx,1\n", into: fresh)
         expect(false, "a non-ExpLog CSV is refused")

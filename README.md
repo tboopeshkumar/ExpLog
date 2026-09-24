@@ -97,7 +97,12 @@ subcategory keeps its expenses in the category; deleting a category takes its
 subcategories with it.
 
 The CSV format gained a ninth column, Subcategory. It's optional on import, so
-files exported before it still read.
+files exported before it still read. Importing a file again fills in the
+subcategory on expenses that are already stored but lack one — how history
+imported before subcategories gets them — matched to each row's exact twin by
+time, and only where the stored expense still has the row's category. The copy
+of the subcategory an older import wrote into the note is removed; anything
+else in the note stays. Running it twice changes nothing.
 
 ## Matching cards
 

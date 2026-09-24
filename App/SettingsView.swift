@@ -105,10 +105,20 @@ private struct ImportReport {
     }
 
     init(_ result: CSV.ImportResult) {
-        title = result.added == 1 ? "Imported 1 expense" : "Imported \(result.added) expenses"
+        if result.added == 0 && result.filledSubcategories > 0 {
+            title = "Updated \(result.filledSubcategories) expenses"
+        } else {
+            title = result.added == 1 ? "Imported 1 expense" : "Imported \(result.added) expenses"
+        }
         var lines: [String] = []
+        if result.filledSubcategories > 0 && result.added > 0 {
+            lines.append("Added subcategories to \(result.filledSubcategories) expenses already here.")
+        }
         if result.duplicates > 0 {
-            lines.append("Skipped \(result.duplicates) already in ExpLog.")
+            let filledNote = result.added == 0 && result.filledSubcategories > 0
+                ? " Their subcategories were filled in; nothing was added twice."
+                : ""
+            lines.append("Skipped \(result.duplicates) already in ExpLog.\(filledNote)")
         }
         if !result.newCategories.isEmpty {
             lines.append("New categories: \(result.newCategories.joined(separator: ", ")).")

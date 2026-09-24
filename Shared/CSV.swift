@@ -56,6 +56,8 @@ public enum CSV {
         public var newCategories: [String] = []
         /// "Transport › Taxi".
         public var newSubcategories: [String] = []
+        /// Expenses already stored that gained a subcategory from the file.
+        public var filledSubcategories = 0
         public var newAccounts: [String] = []
 
         public static func == (lhs: ImportResult, rhs: ImportResult) -> Bool {
@@ -63,6 +65,7 @@ public enum CSV {
                 && lhs.rejected.map(\.line) == rhs.rejected.map(\.line)
                 && lhs.newCategories == rhs.newCategories && lhs.newAccounts == rhs.newAccounts
                 && lhs.newSubcategories == rhs.newSubcategories
+                && lhs.filledSubcategories == rhs.filledSubcategories
         }
     }
 
@@ -83,6 +86,13 @@ public enum CSV {
     /// Adds every row that isn't already in the store. Categories and accounts
     /// are matched by name, ignoring case and surrounding spaces, and created
     /// when missing. Saves once at the end.
+    ///
+    /// A row that is already stored adds nothing — but if it carries a
+    /// subcategory and the stored expense has none, the stored one gains it.
+    /// That's how history imported before subcategories existed gets them:
+    /// import the same data again, with the column. Only when the stored
+    /// expense still has the row's category, so a recategorised expense is left
+    /// as it was edited.
     public static func importRows(from text: String, into context: ModelContext) throws -> ImportResult {
         let rows = parse(text)
         guard let first = rows.first else { return ImportResult() }
@@ -111,6 +121,18 @@ public enum CSV {
             }
         }
         let alreadyStored = ExistingIndex(context: context)
+        var filledThisRun = Set<ObjectIdentifier>()
+
+        func subcategory(named name: String, in category: ExpenseCategory) -> ExpenseSubcategory {
+            let subKey = key(category.name) + "\u{1F}" + key(name)
+            if let existing = subcategories[subKey] { return existing }
+            let order = ((category.subcategories ?? []).map(\.sortOrder).max() ?? -1) + 1
+            let created = ExpenseSubcategory(name: name, category: category, sortOrder: order)
+            context.insert(created)
+            subcategories[subKey] = created
+            result.newSubcategories.append("\(category.name) › \(name)")
+            return created
+        }
 
         for (index, fields) in rows.dropFirst().enumerated() {
             let line = index + 2
@@ -134,8 +156,28 @@ public enum CSV {
             let currencyCode = field(2).isEmpty ? "AED" : field(2).uppercased()
             let reference = field(7).isEmpty ? nil : field(7)
 
-            if alreadyStored.contains(merchant: merchant, amount: amount, date: date, reference: reference) {
+            let stored = alreadyStored.matches(merchant: merchant, amount: amount, date: date, reference: reference)
+            if !stored.isEmpty {
                 result.duplicates += 1
+                // Fill a missing subcategory — on this row's own twin. Of
+                // near-identical stored expenses (two taxi fares minutes apart),
+                // only the closest in time counts: a re-import has the exact
+                // timestamp, and picking any other would put the subcategory on
+                // the wrong one. Among exact ties, take one not yet filled.
+                let nearest = stored.map { abs($0.date.timeIntervalSince(date)) }.min() ?? 0
+                let twins = stored.filter { abs($0.date.timeIntervalSince(date)) == nearest }
+                if hasSubcategories, !field(8).isEmpty, !field(4).isEmpty,
+                   let target = twins.first(where: { candidate in
+                       candidate.subcategory == nil
+                           && !filledThisRun.contains(ObjectIdentifier(candidate))
+                           && candidate.category.map { key($0.name) == key(field(4)) } == true
+                   }),
+                   let category = target.category {
+                    target.subcategory = subcategory(named: field(8), in: category)
+                    target.note = removingNotePart(field(8), from: target.note)
+                    filledThisRun.insert(ObjectIdentifier(target))
+                    result.filledSubcategories += 1
+                }
                 continue
             }
 
@@ -159,19 +201,9 @@ public enum CSV {
 
             // Needs a category to live under; one without is dropped rather
             // than guessed.
-            var subcategory: ExpenseSubcategory?
+            var rowSubcategory: ExpenseSubcategory?
             if hasSubcategories, let category, !field(8).isEmpty {
-                let subKey = key(category.name) + "\u{1F}" + key(field(8))
-                if let existing = subcategories[subKey] {
-                    subcategory = existing
-                } else {
-                    let order = ((category.subcategories ?? []).map(\.sortOrder).max() ?? -1) + 1
-                    let created = ExpenseSubcategory(name: field(8), category: category, sortOrder: order)
-                    context.insert(created)
-                    subcategories[subKey] = created
-                    result.newSubcategories.append("\(category.name) › \(field(8))")
-                    subcategory = created
-                }
+                rowSubcategory = subcategory(named: field(8), in: category)
             }
 
             var account: Account?
@@ -195,7 +227,7 @@ public enum CSV {
                 note: field(6),
                 reference: reference,
                 category: category,
-                subcategory: subcategory,
+                subcategory: rowSubcategory,
                 account: account
             ))
             result.added += 1
@@ -214,26 +246,38 @@ public enum CSV {
     /// snapshot, rows added by this import never count against each other — two
     /// rows in one file are two records, even a pair of identical taxi fares.
     private struct ExistingIndex {
-        private var references: Set<String> = []
-        private var dates: [String: [Date]] = [:]
+        private var references: [String: [Transaction]] = [:]
+        private var byMerchantAndAmount: [String: [Transaction]] = [:]
 
         init(context: ModelContext) {
             for transaction in (try? context.fetch(FetchDescriptor<Transaction>())) ?? [] {
                 if let reference = transaction.reference, !reference.isEmpty {
-                    references.insert(reference)
+                    references[reference, default: []].append(transaction)
                 }
-                dates[Self.key(transaction.merchant, transaction.amount), default: []].append(transaction.date)
+                byMerchantAndAmount[Self.key(transaction.merchant, transaction.amount), default: []].append(transaction)
             }
         }
 
-        func contains(merchant: String, amount: Decimal, date: Date, reference: String?) -> Bool {
-            if let reference, references.contains(reference) { return true }
-            return dates[Self.key(merchant, amount)]?.contains { abs($0.timeIntervalSince(date)) <= 300 } ?? false
+        /// Stored expenses this row is a copy of; empty when it's new.
+        func matches(merchant: String, amount: Decimal, date: Date, reference: String?) -> [Transaction] {
+            if let reference, let byReference = references[reference] { return byReference }
+            return byMerchantAndAmount[Self.key(merchant, amount)]?
+                .filter { abs($0.date.timeIntervalSince(date)) <= 300 } ?? []
         }
 
         private static func key(_ merchant: String, _ amount: Decimal) -> String {
             "\(merchant)\u{1F}\(amount)"
         }
+    }
+
+    /// Drops one " · "-separated part from a note when it's exactly `part`
+    /// (ignoring case). Imports from before subcategories wrote the subcategory
+    /// into the note that way; once it's a real subcategory the copy is noise.
+    /// Anything else in the note is kept as written.
+    static func removingNotePart(_ part: String, from note: String) -> String {
+        let parts = note.components(separatedBy: " · ")
+        let kept = parts.filter { $0.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(part) != .orderedSame }
+        return kept.count == parts.count ? note : kept.joined(separator: " · ")
     }
 
     /// Icons for categories an import commonly brings in that ExpLog doesn't
