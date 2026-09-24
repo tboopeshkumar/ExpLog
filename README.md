@@ -85,6 +85,27 @@ when you tap Save.
 On-device, Settings → Test message parsing does the same as the first one
 interactively: paste a message, see exactly which fields were read.
 
+## Matching cards
+
+Each card in Settings → Cards & accounts has SMS keywords — text copied from
+its alerts, like `XXX4453` or `XXXX4453`. An alert containing one of them is
+matched to that card, ignoring case. Keywords rather than a fixed four digits
+because banks disagree on the mask: some write three digits, some four, some
+"ending 4453". A card can have several.
+
+- A keyword that starts or ends with a digit won't match inside a longer
+  number: `4453` matches `XXXX4453` but not `144531`.
+- Keywords need at least four characters, so a bare `453` can't match an
+  amount like `AED 453.00`; write it with its mask, `XXX453`.
+- When two cards match, the longer keyword wins.
+- Two cards can't share a keyword; the editor offers to merge them instead,
+  moving the expenses across.
+
+The parser reads three- or four-digit cards and keeps them as written, so
+"Add card" in the share form creates a card whose keyword already matches the
+next alert. Settings → Test message parsing shows which card an alert matches.
+Rules in `Shared/AccountMatching.swift`, covered by `check-store.sh`.
+
 ## Learning categories
 
 Saving a transaction with a category records a `MerchantAlias` for that

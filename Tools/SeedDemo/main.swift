@@ -52,9 +52,9 @@ func seed() throws {
     SeedData.seedIfNeeded(context)
     let categories = try context.fetch(FetchDescriptor<ExpenseCategory>())
 
-    for (name, last4) in [("Crescent Credit", "4417"), ("Harbour Platinum", "8802"), ("Summit Cashback", "6150")] {
-        if TransactionDraft.account(withLast4: last4, in: context) == nil {
-            context.insert(Account(name: name, last4: last4))
+    for (name, keyword) in [("Crescent Credit", "XXXX4417"), ("Harbour Platinum", "XXXX8802"), ("Summit Cashback", "ending 6150")] {
+        if AccountMatching.account(for: keyword, in: context) == nil {
+            context.insert(Account(name: name, matchKeywords: [keyword]))
         }
     }
     try context.save()

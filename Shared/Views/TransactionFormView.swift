@@ -48,7 +48,10 @@ public struct TransactionFormView: View {
         Form {
             amountSection
             detailSection
-            if showsCategoryAndAccount, draft.parsedLast4 != nil, draft.account == nil {
+            // Not offered for a card too short to be a safe keyword (a bare
+            // "ending 453"); that one's set up in Settings with more context.
+            if showsCategoryAndAccount, draft.account == nil,
+               let card = draft.parsedCard, card.count >= AccountMatching.minimumKeywordLength {
                 linkCardSection
             }
             noteSection
@@ -116,7 +119,7 @@ public struct TransactionFormView: View {
                 Picker("Account", selection: $draft.account) {
                     Text("None").tag(Account?.none)
                     ForEach(accounts) { account in
-                        Text(account.last4.map { "\(account.name) ••\($0)" } ?? account.name)
+                        Text(account.name)
                             .tag(Account?.some(account))
                     }
                 }
@@ -133,7 +136,7 @@ public struct TransactionFormView: View {
             Button {
                 linkParsedCard()
             } label: {
-                Label("Add card ••\(draft.parsedLast4 ?? "")", systemImage: "creditcard")
+                Label("Add card \(draft.parsedCard ?? "")", systemImage: "creditcard")
             }
         } footer: {
             Text("This card isn't set up yet. Adding it now means future messages from it are matched automatically.")
@@ -161,8 +164,11 @@ public struct TransactionFormView: View {
     // MARK: - Actions
 
     private func linkParsedCard() {
-        guard let last4 = draft.parsedLast4 else { return }
-        let account = Account(name: "Card \(last4)", last4: last4)
+        guard let card = draft.parsedCard else { return }
+        // Named by its digits; the keyword is the card exactly as the alert
+        // wrote it, so the next alert in the same format matches.
+        let digits = card.filter(\.isASCIIDigit)
+        let account = Account(name: "Card \(digits)", matchKeywords: [card])
         context.insert(account)
         draft.account = account
     }

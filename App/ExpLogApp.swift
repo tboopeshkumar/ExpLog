@@ -10,7 +10,9 @@ struct ExpLogApp: App {
                 RootView()
                     .modelContainer(container)
                     .task {
-                        SeedData.seedIfNeeded(ModelContext(container))
+                        let context = ModelContext(container)
+                        SeedData.seedIfNeeded(context)
+                        AccountMatching.foldLegacyDigits(in: context)
                     }
             case .failure(let error):
                 ContentUnavailableView {

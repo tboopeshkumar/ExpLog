@@ -42,7 +42,7 @@ func run() throws {
     expect(groceries != nil, "Groceries category exists")
 
     // The card has to exist for the SMS to be matched to an account.
-    let card = Account(name: "Crescent Credit", last4: "4417")
+    let card = Account(name: "Crescent Credit", matchKeywords: ["XXXX4417"])
     context.insert(card)
     try context.save()
 
@@ -56,7 +56,7 @@ func run() throws {
         exit(1)
     }
     let draft = TransactionDraft(parsed: parsed, context: context)
-    expect(draft.account === card, "card ••4417 matched to \"Crescent Credit\" automatically")
+    expect(draft.account === card, "card XXXX4417 matched to \"Crescent Credit\" by keyword")
     expect(draft.category == nil, "no category yet (nothing learned)")
     expect(draft.amount == Decimal(string: "30.02"), "amount 30.02", "got \(draft.amount)")
 
@@ -94,7 +94,7 @@ func run() throws {
         let unrelatedDraft = TransactionDraft(parsed: parsedUnrelated, context: context)
         expect(TransactionDraft.duplicate(of: unrelatedDraft, in: context) == nil, "a different transaction is not flagged")
         expect(unrelatedDraft.account == nil, "unknown card ••6150 left unassigned")
-        expect(unrelatedDraft.parsedLast4 == "6150", "unknown card digits kept so the form can offer to add it")
+        expect(unrelatedDraft.parsedCard == "6150", "unknown card kept as written so the form can offer to add it")
     }
 
     print("\nTOTALS\n")
@@ -241,45 +241,75 @@ func run() throws {
     expect(faresAgain.added == 0 && faresAgain.duplicates == 2,
            "…and re-importing that file adds neither", "\(faresAgain)")
 
-    print("\nEDITING CARDS\n")
+    print("\nCARD KEYWORDS\n")
 
-    expect(AccountEditing.sanitizedDigits("xx 44-1 7 99") == "4417", "typing keeps only the first four digits")
-    expect(AccountEditing.last4(from: "") == .none, "no digits is allowed (cash, bank accounts)")
-    expect(AccountEditing.last4(from: "44") == .incomplete, "two digits isn't enough")
-    expect(AccountEditing.last4(from: "4417") == .digits("4417"), "four digits accepted")
-    expect(AccountEditing.last4(from: "٤٤١٧") == .none, "non-ASCII digits don't slip through as card digits")
+    // Matching rules.
+    let alert3 = "Purchase of AED 12.00 with Card XXX453 at QUICKSTOP MART on 22-Sep."
+    let alert4 = "Your card XXXX4453 was used at LULU for AED 30.00 on 22-Sep."
+    expect(AccountMatching.matches("XXX453", in: alert3), "three-digit keyword matches its alert")
+    expect(AccountMatching.matches("xxx453", in: alert3), "matching ignores case")
+    expect(!AccountMatching.matches("XXX453", in: alert4), "XXX453 doesn't match XXXX4453")
+    expect(AccountMatching.matches("4453", in: alert4), "bare digits match after a mask")
+    expect(!AccountMatching.matches("4453", in: "ref 144531 for AED 5.00"), "digits don't match inside a longer number")
+    expect(AccountMatching.matches("4453", in: "ref 144531, card ending 4453"), "…but a later clean occurrence still counts")
+    expect(AccountMatching.matches("ending 453", in: "Card ending 453 at X for AED 9.00"), "a keyword can include words")
 
-    // An imported account with just a name, and the account ExpLog made on its
-    // own when an SMS named card 5555 — the same card, twice.
-    let imported = Account(name: "Imported Bank")
-    let automatic = Account(name: "Card 5555", last4: "5555")
-    fresh.insert(imported)
+    // Editing rules.
+    expect(AccountMatching.keywords(from: " XXX453, xxx453 ,,XXXX4453\n") == ["XXX453", "XXXX4453"],
+           "keywords split on commas, trimmed, repeats dropped", "\(AccountMatching.keywords(from: " XXX453, xxx453 ,,XXXX4453\n"))")
+    expect(AccountMatching.tooShort(["453", "XXX453"]) == ["453"], "bare three digits is too short")
+    expect(AccountMatching.keywords(from: "") == [], "no keywords is allowed (cash, bank accounts)")
+
+    // One card written two ways, both on one account; another card by name.
+    let cashback = Account(name: "Cashback card", matchKeywords: ["XXX453", "XXXX4453"])
+    let generic = Account(name: "Generic", matchKeywords: ["4453"])
+    fresh.insert(cashback)
+    fresh.insert(generic)
+    try fresh.save()
+    expect(AccountMatching.account(for: alert3, in: fresh) === cashback, "3-digit alert finds the card")
+    expect(AccountMatching.account(for: alert4, in: fresh) === cashback,
+           "4-digit alert finds it too; the longer keyword beats \"4453\" on another account")
+    expect(AccountMatching.account(for: "AED 20.00 at SHOP, card XXX999", in: fresh) == nil, "an unknown card matches nothing")
+
+    let parsedAlert3 = SMSParser.parse(alert3, receivedAt: day(9, 22))!
+    expect(TransactionDraft(parsed: parsedAlert3, context: fresh).account === cashback,
+           "a shared SMS gets its card from the keywords")
+
+    // Clash and merge: ExpLog made "Card 453" on its own from an alert, then
+    // the same keyword is added to the imported account.
+    let importedCard = Account(name: "Imported Bank")
+    let automatic = Account(name: "Card 777", matchKeywords: ["XXX777"])
+    fresh.insert(importedCard)
     fresh.insert(automatic)
-    fresh.insert(Transaction(amount: 10, date: day(8, 1), merchant: "Old", account: imported))
+    fresh.insert(Transaction(amount: 10, date: day(8, 1), merchant: "Old", account: importedCard))
     fresh.insert(Transaction(amount: 20, date: day(8, 2), merchant: "From SMS", account: automatic))
     fresh.insert(Transaction(amount: 30, date: day(8, 3), merchant: "From SMS too", account: automatic))
     try fresh.save()
 
-    expect(AccountEditing.owner(of: "5555", excluding: imported, in: fresh) === automatic,
-           "typing 5555 on the imported account finds the clash")
-    expect(AccountEditing.owner(of: "5555", excluding: automatic, in: fresh) == nil,
+    let clash = AccountMatching.conflict(for: ["xxx777"], excluding: importedCard, in: fresh)
+    expect(clash?.account === automatic && clash?.keyword == "XXX777", "adding XXX777 elsewhere finds the clash")
+    expect(AccountMatching.conflict(for: ["XXX777"], excluding: automatic, in: fresh) == nil,
            "an account doesn't clash with itself")
 
-    imported.last4 = "5555"
-    try AccountEditing.merge(automatic, into: imported, in: fresh)
-    let accountsAfter = try fresh.fetch(FetchDescriptor<Account>())
-    expect(!accountsAfter.contains { $0.name == "Card 5555" }, "the duplicate account is removed")
-    expect(imported.transactions?.count == 3, "its expenses move to the kept account",
-           "\(imported.transactions?.count ?? 0)")
-    expect(TransactionDraft.account(withLast4: "5555", in: fresh) === imported,
-           "the next SMS from card 5555 matches the kept account")
+    importedCard.matchKeywords = ["XXXX0777"]
+    try AccountMatching.merge(automatic, into: importedCard, in: fresh)
+    expect(!(try fresh.fetch(FetchDescriptor<Account>())).contains { $0.name == "Card 777" }, "the duplicate account is removed")
+    expect(importedCard.transactions?.count == 3, "its expenses move to the kept account")
+    expect(importedCard.matchKeywords == ["XXXX0777", "XXX777"], "keywords are combined", "\(importedCard.matchKeywords)")
+    expect(AccountMatching.account(for: "card XXX777 used at Y for AED 3.00", in: fresh) === importedCard,
+           "the next alert for the merged card matches the kept account")
 
-    let bare = Account(name: "No digits yet")
-    let digitsOnly = Account(name: "Card 6666", last4: "6666")
-    fresh.insert(bare)
-    fresh.insert(digitsOnly)
-    try AccountEditing.merge(digitsOnly, into: bare, in: fresh)
-    expect(bare.last4 == "6666", "merging into an account without digits adopts the other's")
+    // Accounts from before keywords: digits become the first keyword, once.
+    let legacy = Account(name: "Old style")
+    legacy.last4 = "8802"
+    fresh.insert(legacy)
+    try fresh.save()
+    AccountMatching.foldLegacyDigits(in: fresh)
+    AccountMatching.foldLegacyDigits(in: fresh)
+    expect(legacy.matchKeywords == ["8802"] && legacy.last4 == nil, "legacy digits become a keyword, once",
+           "\(legacy.matchKeywords) / \(legacy.last4 ?? "nil")")
+    expect(AccountMatching.account(for: "A txn on your Card XXXX8802 at TAXI for AED 17.00", in: fresh) === legacy,
+           "and still match the card's alerts")
 
     do {
         _ = try CSV.importRows(from: "Name,Value\nx,1\n", into: fresh)

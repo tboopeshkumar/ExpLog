@@ -109,7 +109,7 @@ struct TransactionRow: View {
                 HStack(spacing: 4) {
                     Text(transaction.date.formatted(.dateTime.day().month(.abbreviated)))
                     if let account = transaction.account {
-                        Text("· \(account.last4.map { "••\($0)" } ?? account.name)")
+                        Text("· \(account.name)")
                     }
                     if transaction.category == nil {
                         Text("· Uncategorised")

@@ -4,6 +4,7 @@ import SwiftUI
 /// message formats turn up constantly, and this turns "it didn't work" into a
 /// precise report of which field failed.
 struct ParserTesterView: View {
+    @Environment(\.modelContext) private var context
     @State private var text = ""
 
     private var parsed: ParsedTransaction? {
@@ -28,7 +29,10 @@ struct ParserTesterView: View {
                     row("Amount", parsed.amount.map { "\($0)" })
                     row("Currency", parsed.currency)
                     row("Merchant", parsed.merchant)
-                    row("Card", parsed.cardLast4.map { "••\($0)" })
+                    row("Card", parsed.card)
+                    // Which account the keywords pick — the quickest way to
+                    // check a card's keywords against a real alert.
+                    row("Matches", AccountMatching.account(for: text, in: context)?.name ?? "No card — add a keyword")
                     row("Date", parsed.date?.formatted(.dateTime.day().month().year()))
                     row("Reference", parsed.reference)
                 }

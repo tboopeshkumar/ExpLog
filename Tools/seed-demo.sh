@@ -21,6 +21,6 @@ fi
 mkdir -p .build
 xcrun swiftc -target arm64-apple-macosx15.0 -o .build/seeddemo \
     Shared/ParsedTransaction.swift Shared/SMSParser.swift Shared/Formatting.swift \
-    Shared/SeedData.swift Shared/TransactionDraft.swift Shared/TransactionLink.swift \
+    Shared/SeedData.swift Shared/TransactionDraft.swift Shared/TransactionLink.swift Shared/AccountMatching.swift \
     Shared/Models/Models.swift Tools/SeedDemo/main.swift
 ./.build/seeddemo "$STORE"

@@ -9,18 +9,26 @@ import SwiftData
 @Model
 public final class Account {
     public var name: String = ""
-    /// Last four digits as they appear in the SMS. How a card alert is matched
-    /// to an account.
+
+    /// Text from this card's SMS alerts — "XXX4453", "XXXX4453". An alert
+    /// containing any of them belongs to this account; see AccountMatching.
+    /// Several, because banks don't agree on how many digits to show.
+    public var matchKeywords: [String] = []
+
+    /// Legacy: the four digits accounts were matched by before keywords.
+    /// Folded into `matchKeywords` at launch (AccountMatching.foldLegacyDigits)
+    /// and never written. Kept only so stores from that version can be read.
     public var last4: String?
+
     public var isArchived: Bool = false
     public var createdAt: Date = Date.now
 
     @Relationship(deleteRule: .nullify, inverse: \Transaction.account)
     public var transactions: [Transaction]?
 
-    public init(name: String, last4: String? = nil) {
+    public init(name: String, matchKeywords: [String] = []) {
         self.name = name
-        self.last4 = last4
+        self.matchKeywords = matchKeywords
         self.createdAt = .now
     }
 }

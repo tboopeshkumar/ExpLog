@@ -24,7 +24,7 @@ public enum SMSParser {
             result.amount = money.amount
         }
         result.merchant = matchMerchant(in: message)
-        result.cardLast4 = matchCardLast4(in: message)
+        result.card = matchCard(in: message)
         result.date = matchDate(in: message, receivedAt: receivedAt)
         result.reference = matchReference(in: message)
 
@@ -142,18 +142,21 @@ public enum SMSParser {
 
     // MARK: - Card
 
+    /// Three or four digits: banks disagree, and "XXX453" and "XXXX4453" are
+    /// both in use. The capture keeps any mask, so the result can be matched
+    /// back against the next alert verbatim.
     private static let cardPatterns = [
-        #"\bcard\s+(?:no\.?\s*)?(?:ending(?:\s+(?:with|in))?\s+)?[X*#]{0,}(\d{4})\b"#,
-        #"\bcard\s+[X*#]{2,}\s*(\d{4})\b"#,
-        #"\b[X*]{4,}(\d{4})\b"#,
-        #"\bending\s+(?:with\s+|in\s+)?(\d{4})\b"#,
+        #"\bcard\s+(?:no\.?\s*)?(?:ending(?:\s+(?:with|in))?\s+)?([X*#]*\d{3,4})\b"#,
+        #"\bcard\s+([X*#]{2,}\s*\d{3,4})\b"#,
+        #"(?<![\w*#])([X*#]{2,}\d{3,4})\b"#,
+        #"\bending\s+(?:with\s+|in\s+)?(\d{3,4})\b"#,
     ]
 
-    private static func matchCardLast4(in text: String) -> String? {
+    private static func matchCard(in text: String) -> String? {
         for pattern in cardPatterns {
             if let groups = firstMatch(of: pattern, in: text, caseInsensitive: true),
-               groups.count >= 2, let digits = groups[1] {
-                return digits
+               groups.count >= 2, let card = groups[1] {
+                return card.replacingOccurrences(of: " ", with: "")
             }
         }
         return nil

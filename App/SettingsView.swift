@@ -132,37 +132,32 @@ struct AccountsView: View {
     @Query(sort: \Account.name) private var accounts: [Account]
 
     @State private var name = ""
-    @State private var last4 = ""
+    @State private var keywordText = ""
     @State private var editing: Account?
 
-    /// Another card already using the digits typed in the Add section.
-    private var takenBy: Account? {
-        guard case .digits(let digits) = AccountEditing.last4(from: last4) else { return nil }
-        return AccountEditing.owner(of: digits, in: context)
+    private var keywords: [String] { AccountMatching.keywords(from: keywordText) }
+    private var tooShort: [String] { AccountMatching.tooShort(keywords) }
+    private var clash: (account: Account, keyword: String)? {
+        AccountMatching.conflict(for: keywords, in: context)
     }
 
     private var canAdd: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty
-            && AccountEditing.last4(from: last4) != .incomplete
-            && takenBy == nil
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && tooShort.isEmpty && clash == nil
     }
 
     var body: some View {
         List {
             Section {
                 TextField("Name (e.g. Crescent Credit)", text: $name)
-                TextField("Last 4 digits", text: $last4)
-                    .keyboardType(.numberPad)
-                    .onChange(of: last4) { _, typed in last4 = AccountEditing.sanitizedDigits(typed) }
+                TextField("SMS keywords (e.g. XXX4453)", text: $keywordText)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
                 Button("Add card", action: add)
                     .disabled(!canAdd)
             } header: {
                 Text("Add")
             } footer: {
-                if let takenBy {
-                    Text("••\(last4) is already on “\(takenBy.name)”. Tap it below to edit instead.")
-                        .foregroundStyle(.orange)
-                }
+                KeywordFooter(tooShort: tooShort, clash: clash, isNew: true)
             }
 
             Section {
@@ -181,7 +176,7 @@ struct AccountsView: View {
             } header: {
                 Text("Cards")
             } footer: {
-                Text("A card's last four digits are how its SMS alerts find it. Tap a card to add or change them.")
+                Text("An SMS containing one of a card's keywords is matched to that card. Tap a card to edit its keywords.")
             }
         }
         .navigationTitle("Cards & accounts")
@@ -191,12 +186,10 @@ struct AccountsView: View {
     }
 
     private func add() {
-        var digits: String?
-        if case .digits(let typed) = AccountEditing.last4(from: last4) { digits = typed }
-        context.insert(Account(name: name.trimmingCharacters(in: .whitespaces), last4: digits))
+        context.insert(Account(name: name.trimmingCharacters(in: .whitespaces), matchKeywords: keywords))
         try? context.save()
         name = ""
-        last4 = ""
+        keywordText = ""
     }
 }
 
@@ -207,15 +200,11 @@ private struct AccountRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(account.name)
-                Group {
-                    if let digits = account.last4 {
-                        Text("••\(digits)").monospacedDigit()
-                    } else {
-                        Text("No card digits")
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(account.matchKeywords.isEmpty ? "No SMS keywords" : account.matchKeywords.joined(separator: ", "))
+                    .font(.caption)
+                    .monospaced()
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Spacer()
             let count = account.transactions?.count ?? 0
@@ -226,7 +215,26 @@ private struct AccountRow: View {
     }
 }
 
-/// Rename a card and set the four digits its SMS alerts show.
+/// Explains the keyword field, or what's wrong with what's typed in it.
+private struct KeywordFooter: View {
+    let tooShort: [String]
+    let clash: (account: Account, keyword: String)?
+    let isNew: Bool
+
+    var body: some View {
+        if !tooShort.isEmpty {
+            Text("“\(tooShort.joined(separator: "”, “"))” is too short — use at least \(AccountMatching.minimumKeywordLength) characters, with the mask: XXX453, not 453.")
+                .foregroundStyle(.orange)
+        } else if let clash, isNew {
+            Text("“\(clash.keyword)” is already on “\(clash.account.name)”. Tap it below to edit instead.")
+                .foregroundStyle(.orange)
+        } else {
+            Text("Text from this card's SMS, as the bank writes it: XXX4453, XXXX4453. Separate several with commas. Leave empty for cash or accounts without SMS.")
+        }
+    }
+}
+
+/// Rename a card and set the SMS keywords that identify it.
 private struct AccountEditor: View {
     let account: Account
 
@@ -234,21 +242,22 @@ private struct AccountEditor: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var name: String
-    @State private var last4: String
-    /// Set when the digits already belong to another account, pending a merge.
-    @State private var conflict: Account?
+    @State private var keywordText: String
+    /// Set when a keyword already belongs to another account, pending a merge.
+    @State private var conflict: (account: Account, keyword: String)?
 
     init(account: Account) {
         self.account = account
         _name = State(initialValue: account.name)
-        _last4 = State(initialValue: account.last4 ?? "")
+        _keywordText = State(initialValue: account.matchKeywords.joined(separator: ", "))
     }
 
-    private var parsedDigits: AccountEditing.Last4 { AccountEditing.last4(from: last4) }
+    private var keywords: [String] { AccountMatching.keywords(from: keywordText) }
+    private var tooShort: [String] { AccountMatching.tooShort(keywords) }
     private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
 
     private var canSave: Bool {
-        !trimmedName.isEmpty && parsedDigits != .incomplete
+        !trimmedName.isEmpty && tooShort.isEmpty
     }
 
     var body: some View {
@@ -259,19 +268,14 @@ private struct AccountEditor: View {
             }
 
             Section {
-                TextField("Last 4 digits", text: $last4)
-                    .keyboardType(.numberPad)
-                    .monospacedDigit()
-                    .onChange(of: last4) { _, typed in last4 = AccountEditing.sanitizedDigits(typed) }
+                TextField("XXX4453, XXXX4453", text: $keywordText, axis: .vertical)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .monospaced()
             } header: {
-                Text("Card digits")
+                Text("SMS keywords")
             } footer: {
-                if parsedDigits == .incomplete {
-                    Text("Enter all four digits.")
-                        .foregroundStyle(.orange)
-                } else {
-                    Text("The last four digits as they appear in the card's SMS alerts — 1442 for XXXX1442. Leave empty for cash or accounts without SMS.")
-                }
+                KeywordFooter(tooShort: tooShort, clash: nil, isNew: false)
             }
 
             Section {
@@ -289,23 +293,25 @@ private struct AccountEditor: View {
             }
         }
         .confirmationDialog(
-            conflict.map { "••\(last4) is already on “\($0.name)”" } ?? "",
+            conflict.map { "“\($0.keyword)” is already on “\($0.account.name)”" } ?? "",
             isPresented: Binding(get: { conflict != nil }, set: { if !$0 { conflict = nil } }),
-            titleVisibility: .visible,
-            presenting: conflict
-        ) { other in
-            Button("Merge into “\(trimmedName)”") { apply(merging: other) }
+            titleVisibility: .visible
+        ) {
+            if let other = conflict?.account {
+                Button("Merge into “\(trimmedName)”") { apply(merging: other) }
+            }
             Button("Cancel", role: .cancel) { conflict = nil }
-        } message: { other in
-            let count = other.transactions?.count ?? 0
-            Text("They're the same card. \(count == 1 ? "Its 1 expense moves" : "Its \(count) expenses move") here and “\(other.name)” is removed.")
+        } message: {
+            if let other = conflict?.account {
+                let count = other.transactions?.count ?? 0
+                Text("They're the same card. \(count == 1 ? "Its 1 expense moves" : "Its \(count) expenses move") here, its keywords are added to this card's, and “\(other.name)” is removed.")
+            }
         }
     }
 
     private func save() {
-        if case .digits(let digits) = parsedDigits,
-           let other = AccountEditing.owner(of: digits, excluding: account, in: context) {
-            conflict = other
+        if let clash = AccountMatching.conflict(for: keywords, excluding: account, in: context) {
+            conflict = clash
             return
         }
         apply(merging: nil)
@@ -313,14 +319,10 @@ private struct AccountEditor: View {
 
     private func apply(merging other: Account?) {
         account.name = trimmedName
-        if case .digits(let digits) = parsedDigits {
-            account.last4 = digits
-        } else {
-            account.last4 = nil
-        }
+        account.matchKeywords = keywords
         do {
             if let other {
-                try AccountEditing.merge(other, into: account, in: context)
+                try AccountMatching.merge(other, into: account, in: context)
             } else {
                 try context.save()
             }

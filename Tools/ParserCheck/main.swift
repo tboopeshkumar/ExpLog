@@ -14,7 +14,7 @@ struct Expectation {
     let amount: Decimal?
     let currency: String?
     let merchant: String?
-    let cardLast4: String?
+    let card: String?        // as the SMS writes it, mask included
     let day: String?          // "yyyy-MM-dd", nil when the SMS carries no date
     let reference: String?
 }
@@ -41,36 +41,50 @@ let cases: [Expectation] = [
         label: "Deferred-payment alert with reference",
         message: "Dear Alex Morgan!  Cardholder, Your card XXXX4417 was used at V NORTHGATE AND SONS L for AED  15.90 on deferred payment basis on 20-Sep ref R77201. As per the agreement we confirm our acceptance to sell to you at the agreed price. Available Balance on your card is AED XXXX.  Regards, Crescent Finance.",
         amount: Decimal(string: "15.90"), currency: "AED",
-        merchant: "V Northgate And Sons L", cardLast4: "4417",
+        merchant: "V Northgate And Sons L", card: "XXXX4417",
         day: "2026-09-20", reference: "R77201"
     ),
     Expectation(
         label: "Deferred-payment alert 2",
         message: "Dear Alex Morgan!  Cardholder, Your card XXXX4417 was used at MEGA CENTER RIVERTON XYZ for AED  30.02 on deferred payment basis on 20-Sep ref R77315. As per the agreement we confirm our acceptance to sell to you at the agreed price. Available Balance on your card is AED XXXX.  Regards, Crescent Finance.",
         amount: Decimal(string: "30.02"), currency: "AED",
-        merchant: "Mega Center Riverton Xyz", cardLast4: "4417",
+        merchant: "Mega Center Riverton Xyz", card: "XXXX4417",
         day: "2026-09-20", reference: "R77315"
     ),
     Expectation(
         label: "Approved txn with time",
         message: "A txn on your Card XXXX8802 at DIAMOND CABS CITYCENT for AED  17.00 on 20-Sep at 11:30  is approved. Your available balance is XXXX.95",
         amount: Decimal(string: "17.00"), currency: "AED",
-        merchant: "Diamond Cabs Citycent", cardLast4: "8802",
+        merchant: "Diamond Cabs Citycent", card: "XXXX8802",
         day: "2026-09-20", reference: nil
     ),
     Expectation(
         label: "Thank-you, no date",
         message: "Thank you for using Card ending 6150 at ROUND CLOCK MART SUPERMA for AED 2.25. Avl. limit is AED XXX.80.",
         amount: Decimal(string: "2.25"), currency: "AED",
-        merchant: "Round Clock Mart Superma", cardLast4: "6150",
+        merchant: "Round Clock Mart Superma", card: "6150",
         day: nil, reference: nil
     ),
     Expectation(
         label: "Thank-you, no date 2",
         message: "Thank you for using Card ending 6150 at BEANERY PLAZA 20THFLOOR for AED 31.20. Avl. limit is AED XXX.05.",
         amount: Decimal(string: "31.20"), currency: "AED",
-        merchant: "Beanery Plaza 20THFLOOR", cardLast4: "6150",
+        merchant: "Beanery Plaza 20THFLOOR", card: "6150",
         day: nil, reference: nil
+    ),
+    Expectation(
+        label: "Three-digit mask",
+        message: "Purchase of AED 12.00 with Card XXX453 at QUICKSTOP MART on 22-Sep. Avl bal AED XXXX.10",
+        amount: Decimal(string: "12.00"), currency: "AED",
+        merchant: "Quickstop Mart", card: "XXX453",
+        day: "2026-09-22", reference: nil
+    ),
+    Expectation(
+        label: "Star mask",
+        message: "Your card ****7731 was used at NORTH LANE PHARMACY for AED 64.50 on 21-Sep.",
+        amount: Decimal(string: "64.50"), currency: "AED",
+        merchant: "North Lane Pharmacy", card: "****7731",
+        day: "2026-09-21", reference: nil
     ),
 ]
 
@@ -119,7 +133,7 @@ for testCase in cases {
     check("amount", parsed.amount, testCase.amount)
     check("currency", parsed.currency, testCase.currency)
     check("merchant", parsed.merchant, testCase.merchant)
-    check("card", parsed.cardLast4, testCase.cardLast4)
+    check("card", parsed.card, testCase.card)
     check("date", parsed.date.map { dayFormatter.string(from: $0) }, testCase.day)
     check("ref", parsed.reference, testCase.reference)
     print("")

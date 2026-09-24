@@ -7,7 +7,10 @@ public struct ParsedTransaction: Equatable, Sendable {
     public var amount: Decimal?
     public var currency: String?
     public var merchant: String?
-    public var cardLast4: String?
+    /// The card as the SMS writes it: "XXXX4417", "XXX453", or bare digits for
+    /// "Card ending 6150". Masks vary by bank, so it's kept verbatim — it's
+    /// what "Add card" uses as the new account's match keyword.
+    public var card: String?
     public var date: Date?
     public var reference: String?
 
@@ -19,7 +22,7 @@ public struct ParsedTransaction: Equatable, Sendable {
 
     /// Enough was recognised to be worth showing a pre-filled form.
     public var isUsable: Bool {
-        amount != nil && (cardLast4 != nil || merchant != nil)
+        amount != nil && (card != nil || merchant != nil)
     }
 
     /// Fields the form should highlight for review.
@@ -27,7 +30,7 @@ public struct ParsedTransaction: Equatable, Sendable {
         var missing: [String] = []
         if amount == nil { missing.append("amount") }
         if merchant == nil { missing.append("merchant") }
-        if cardLast4 == nil { missing.append("card") }
+        if card == nil { missing.append("card") }
         if date == nil { missing.append("date") }
         return missing
     }

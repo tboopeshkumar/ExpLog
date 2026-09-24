@@ -38,7 +38,7 @@ public enum TransactionLink {
         ]
         if !draft.note.isEmpty { items.append(URLQueryItem(name: Key.note, value: draft.note)) }
         if let reference = draft.reference { items.append(URLQueryItem(name: Key.reference, value: reference)) }
-        if let card = draft.parsedLast4 { items.append(URLQueryItem(name: Key.card, value: card)) }
+        if let card = draft.parsedCard { items.append(URLQueryItem(name: Key.card, value: card)) }
         if let raw = draft.rawMessage { items.append(URLQueryItem(name: Key.raw, value: raw)) }
 
         components.queryItems = items
@@ -70,15 +70,16 @@ public enum TransactionLink {
         draft.note = values[Key.note] ?? ""
         draft.reference = values[Key.reference]
         draft.rawMessage = values[Key.raw]
-        draft.parsedLast4 = values[Key.card]
+        draft.parsedCard = values[Key.card]
 
         if let seconds = values[Key.date].flatMap({ Double($0) }) {
             draft.date = Date(timeIntervalSince1970: seconds)
         }
 
         // The lookups the extension could not do itself.
-        if let last4 = draft.parsedLast4 {
-            draft.account = TransactionDraft.account(withLast4: last4, in: context)
+        // Matched against the whole message, as the extension would have.
+        if let text = draft.rawMessage ?? draft.parsedCard {
+            draft.account = AccountMatching.account(for: text, in: context)
         }
         if let raw = draft.rawMessage,
            let parsedMerchant = SMSParser.parse(raw)?.merchant,

@@ -20,9 +20,9 @@ public final class TransactionDraft {
     /// Fields the parser could not find, so the form can point at them.
     public var unparsedFields: [String] = []
 
-    /// Card digits read from the SMS. Kept even when no Account matches, so the
-    /// form can offer to create one.
-    public var parsedLast4: String?
+    /// The card as the SMS wrote it ("XXX453"). Kept even when no account
+    /// matches, so the form can offer to create one with it as the keyword.
+    public var parsedCard: String?
 
     /// The transaction being edited, when editing rather than creating.
     private var existing: Transaction?
@@ -59,10 +59,8 @@ public final class TransactionDraft {
             if !alias.displayName.isEmpty { merchant = alias.displayName }
             category = alias.category
         }
-        parsedLast4 = parsed.cardLast4
-        if let last4 = parsed.cardLast4 {
-            account = Self.account(withLast4: last4, in: context)
-        }
+        parsedCard = parsed.card
+        account = AccountMatching.account(for: parsed.raw, in: context)
     }
 
     public var isValid: Bool {
@@ -75,11 +73,6 @@ public final class TransactionDraft {
         let key = merchant.lowercased()
         guard !key.isEmpty else { return nil }
         let descriptor = FetchDescriptor<MerchantAlias>(predicate: #Predicate { $0.key == key })
-        return try? context.fetch(descriptor).first
-    }
-
-    public static func account(withLast4 last4: String, in context: ModelContext) -> Account? {
-        let descriptor = FetchDescriptor<Account>(predicate: #Predicate { $0.last4 == last4 })
         return try? context.fetch(descriptor).first
     }
 
