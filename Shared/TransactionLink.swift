@@ -85,6 +85,7 @@ public enum TransactionLink {
            let parsedMerchant = SMSParser.parse(raw)?.merchant,
            let alias = TransactionDraft.alias(for: parsedMerchant, in: context) {
             draft.category = alias.category
+            draft.subcategory = alias.subcategory
             if !alias.displayName.isEmpty { draft.merchant = alias.displayName }
         }
 

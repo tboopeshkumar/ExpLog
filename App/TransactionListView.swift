@@ -113,6 +113,8 @@ struct TransactionRow: View {
                     }
                     if transaction.category == nil {
                         Text("· Uncategorised")
+                    } else if let subcategory = transaction.subcategory {
+                        Text("· \(subcategory.name)")
                     }
                 }
                 .font(.caption)

@@ -44,7 +44,7 @@ let categoryForMessage = [
 
 @MainActor
 func seed() throws {
-    let schema = Schema([Transaction.self, ExpenseCategory.self, Account.self, MerchantAlias.self])
+    let schema = Schema([Transaction.self, ExpenseCategory.self, ExpenseSubcategory.self, Account.self, MerchantAlias.self])
     let configuration = ModelConfiguration(schema: schema, url: URL(fileURLWithPath: storePath))
     let container = try ModelContainer(for: schema, configurations: [configuration])
     let context = ModelContext(container)

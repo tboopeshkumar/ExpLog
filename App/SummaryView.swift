@@ -48,7 +48,13 @@ struct SummaryView: View {
                         NavigationLink {
                             CategoryMonthView(category: row.category, month: month)
                         } label: {
-                            CategoryShareRow(row: row, currencyCode: summary.currencyCode)
+                            ShareRow(
+                                category: row.category,
+                                title: row.category?.name ?? "Uncategorised",
+                                amount: row.amount,
+                                share: row.share,
+                                currencyCode: summary.currencyCode
+                            )
                         }
                     }
                 }
@@ -95,26 +101,30 @@ struct SummaryView: View {
     }
 }
 
-/// One category's line: icon and name, amount and share, and a share bar.
-private struct CategoryShareRow: View {
-    let row: MonthSummary.Row
+/// One line of a breakdown: icon and name, amount and share, and a share bar.
+/// Used for categories and, in the drill-down, their subcategories.
+private struct ShareRow: View {
+    let category: ExpenseCategory?
+    let title: String
+    let amount: Decimal
+    let share: Double
     let currencyCode: String
 
     var body: some View {
         HStack(spacing: 12) {
-            CategoryIcon(row.category)
+            CategoryIcon(category)
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(row.category?.name ?? "Uncategorised")
+                    Text(title)
                         .lineLimit(1)
                     Spacer(minLength: 8)
                     // Tabular digits so amounts align down the column.
-                    Formatting.moneyText(row.amount, code: currencyCode)
+                    Formatting.moneyText(amount, code: currencyCode)
                         .monospacedDigit()
                 }
                 HStack(spacing: 8) {
-                    ShareBar(share: row.share)
-                    Text(row.share, format: .percent.precision(.fractionLength(0)))
+                    ShareBar(share: share)
+                    Text(share, format: .percent.precision(.fractionLength(0)))
                         .font(.caption)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
@@ -165,13 +175,32 @@ private struct CategoryMonthView: View {
     }
 
     var body: some View {
-        List(matching) { transaction in
-            Button {
-                editing = TransactionDraft(editing: transaction)
-            } label: {
-                TransactionRow(transaction: transaction)
+        let matching = matching
+        let breakdown = SubcategoryBreakdown(transactions: matching)
+        List {
+            if breakdown.isWorthShowing {
+                Section("By subcategory") {
+                    ForEach(breakdown.rows) { row in
+                        ShareRow(
+                            category: category,
+                            title: row.subcategory?.name ?? "No subcategory",
+                            amount: row.amount,
+                            share: row.share,
+                            currencyCode: matching.first?.currencyCode ?? "AED"
+                        )
+                    }
+                }
             }
-            .buttonStyle(.plain)
+            Section(breakdown.isWorthShowing ? "Expenses" : "") {
+                ForEach(matching) { transaction in
+                    Button {
+                        editing = TransactionDraft(editing: transaction)
+                    } label: {
+                        TransactionRow(transaction: transaction)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .navigationTitle(category?.name ?? "Uncategorised")
         .navigationBarTitleDisplayMode(.inline)

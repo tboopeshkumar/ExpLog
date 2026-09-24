@@ -311,6 +311,90 @@ func run() throws {
     expect(AccountMatching.account(for: "A txn on your Card XXXX8802 at TAXI for AED 17.00", in: fresh) === legacy,
            "and still match the card's alerts")
 
+    print("\nSUBCATEGORIES\n")
+
+    let freshCategories = try fresh.fetch(FetchDescriptor<ExpenseCategory>())
+    let transport = freshCategories.first { $0.name == "Transport" }!
+    let freshDining = freshCategories.first { $0.name == "Dining" }!
+    let taxi = ExpenseSubcategory(name: "Taxi", category: transport, sortOrder: 0)
+    let bus = ExpenseSubcategory(name: "Bus", category: transport, sortOrder: 1)
+    fresh.insert(taxi)
+    fresh.insert(bus)
+    try fresh.save()
+    expect(transport.sortedSubcategories.map(\.name) == ["Taxi", "Bus"], "subcategories belong to their category, in order")
+
+    // Consistency: a subcategory only under its own category.
+    let subDraft = TransactionDraft()
+    subDraft.amount = 20
+    subDraft.merchant = "Ride"
+    subDraft.category = transport
+    subDraft.subcategory = taxi
+    subDraft.category = freshDining
+    expect(subDraft.subcategory == nil, "changing the category clears a subcategory from the old one")
+    expect(Transaction(amount: 1, merchant: "x", category: freshDining, subcategory: taxi).subcategory == nil,
+           "a transaction can't hold another category's subcategory")
+
+    // Learning: the next alert from a merchant arrives with both levels.
+    let rideSMS = "Thank you for using Card ending 9911 at CITY RIDES LLC for AED 18.00. Avl. limit is AED XXX.10."
+    let firstRide = TransactionDraft(parsed: SMSParser.parse(rideSMS)!, context: fresh)
+    firstRide.category = transport
+    firstRide.subcategory = taxi
+    try firstRide.save(in: fresh)
+    let nextRide = TransactionDraft(parsed: SMSParser.parse(rideSMS.replacingOccurrences(of: "18.00", with: "22.00"))!, context: fresh)
+    expect(nextRide.category === transport && nextRide.subcategory === taxi,
+           "the next alert from the merchant arrives as Transport › Taxi")
+
+    // Breakdown for the drill-down.
+    let rides = [
+        Transaction(amount: 60, merchant: "a", category: transport, subcategory: taxi),
+        Transaction(amount: 10, merchant: "b", category: transport, subcategory: bus),
+        Transaction(amount: 30, merchant: "c", category: transport),
+    ]
+    let breakdown = SubcategoryBreakdown(transactions: rides)
+    expect(breakdown.rows.map(\.amount) == [60, 30, 10], "breakdown ranked largest first", "\(breakdown.rows.map(\.amount))")
+    expect(breakdown.rows[1].subcategory == nil, "expenses without a subcategory get their own row")
+    expect(abs(breakdown.rows.reduce(0) { $0 + $1.share } - 1) < 0.000001, "shares add up to the category's 100%")
+    expect(breakdown.isWorthShowing, "shown when any expense has a subcategory")
+    expect(!SubcategoryBreakdown(transactions: [rides[2]]).isWorthShowing, "hidden when none do")
+
+    // CSV: the new column, and files from before it.
+    let withSubs = """
+    Date,Amount,Currency,Merchant,Category,Account,Note,Reference,Subcategory
+    2026-06-01T09:00:00,15.00,AED,Metro,Transport,,,,Bus
+    2026-06-02T09:00:00,40.00,AED,Uni,Education,,,,Schooling
+    2026-06-03T09:00:00,5.00,AED,Loose,,,,,Orphan
+    """
+    let subImport = try CSV.importRows(from: withSubs, into: fresh)
+    let metro = try fresh.fetch(FetchDescriptor<Transaction>()).first { $0.merchant == "Metro" }
+    expect(metro?.subcategory === bus, "an existing subcategory is matched by name")
+    expect(subImport.newSubcategories == ["Education › Schooling"], "a missing one is created under its category",
+           "\(subImport.newSubcategories)")
+    let loose = try fresh.fetch(FetchDescriptor<Transaction>()).first { $0.merchant == "Loose" }
+    expect(loose?.subcategory == nil && subImport.added == 3, "a subcategory with no category is dropped, the row kept")
+
+    let oldFormat = """
+    Date,Amount,Currency,Merchant,Category,Account,Note,Reference
+    2026-06-04T09:00:00,7.00,AED,Old file,Transport,,,
+    """
+    expect(try CSV.importRows(from: oldFormat, into: fresh).added == 1, "an 8-column file from before subcategories still imports")
+
+    let exportedWithSubs = try String(contentsOf: try CSV.write(try fresh.fetch(FetchDescriptor<Transaction>())), encoding: .utf8)
+    expect(exportedWithSubs.hasPrefix("Date,Amount,Currency,Merchant,Category,Account,Note,Reference,Subcategory"),
+           "export writes the Subcategory column")
+    expect(exportedWithSubs.contains(",Metro,Transport,,,,Bus"), "and fills it")
+
+    // Deleting.
+    let busRides = bus.transactions?.count ?? 0
+    fresh.delete(bus)
+    try fresh.save()
+    expect(busRides > 0 && metro?.subcategory == nil && metro?.category === transport,
+           "deleting a subcategory keeps its expenses in the category")
+    let freshEducation = try fresh.fetch(FetchDescriptor<ExpenseCategory>()).first { $0.name == "Education" }!
+    fresh.delete(freshEducation)
+    try fresh.save()
+    expect(!(try fresh.fetch(FetchDescriptor<ExpenseSubcategory>())).contains { $0.name == "Schooling" },
+           "deleting a category takes its subcategories with it")
+
     do {
         _ = try CSV.importRows(from: "Name,Value\nx,1\n", into: fresh)
         expect(false, "a non-ExpLog CSV is refused")
@@ -333,6 +417,7 @@ enum SharedStoreSchema {
     static let schema = Schema([
         Transaction.self,
         ExpenseCategory.self,
+        ExpenseSubcategory.self,
         Account.self,
         MerchantAlias.self,
     ])

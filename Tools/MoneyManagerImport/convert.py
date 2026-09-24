@@ -20,8 +20,10 @@ How rows become ExpLog transactions:
   in the note.
 - Merchant: "Description" when present (it holds the merchant on the rows that
   use it), otherwise "Note", otherwise the subcategory or category.
-- Note: the Note when Description took the merchant slot, then the
-  subcategory, then any original foreign amount, joined with " · ".
+- Note: the Note when Description took the merchant slot, then any original
+  foreign amount, joined with " · ".
+- Subcategory: Money Manager's, as-is; ExpLog creates it under the mapped
+  category on import.
 - Category: mapped through CATEGORY_MAP. An unmapped category stops the
   conversion rather than being guessed.
 - Income and transfer rows are skipped and counted; ExpLog records expenses.
@@ -62,7 +64,7 @@ CATEGORY_MAP = {
     "rent": "Rent",
 }
 
-EXPLOG_HEADER = ["Date", "Amount", "Currency", "Merchant", "Category", "Account", "Note", "Reference"]
+EXPLOG_HEADER = ["Date", "Amount", "Currency", "Merchant", "Category", "Account", "Note", "Reference", "Subcategory"]
 NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 
@@ -135,8 +137,6 @@ def convert(rows):
         note_parts = []
         if description and note:
             note_parts.append(note)
-        if subcategory:
-            note_parts.append(subcategory)
         currency = row.get("Currency", "AED").upper()
         if currency != "AED":
             original = Decimal(row["Amount"]).quantize(Decimal("0.01"))
@@ -151,6 +151,7 @@ def convert(rows):
             "Account": row.get("Accounts", ""),
             "Note": " · ".join(note_parts),
             "Reference": "",
+            "Subcategory": subcategory if mapped else "",
         })
     return out, skipped, problems
 

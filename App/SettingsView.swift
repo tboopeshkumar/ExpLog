@@ -113,6 +113,9 @@ private struct ImportReport {
         if !result.newCategories.isEmpty {
             lines.append("New categories: \(result.newCategories.joined(separator: ", ")).")
         }
+        if !result.newSubcategories.isEmpty {
+            lines.append("New subcategories: \(result.newSubcategories.joined(separator: ", ")).")
+        }
         if !result.newAccounts.isEmpty {
             lines.append("New accounts: \(result.newAccounts.joined(separator: ", ")).")
         }
@@ -364,18 +367,129 @@ struct CategoriesView: View {
 
             Section {
                 ForEach(categories) { category in
-                    HStack(spacing: 12) {
-                        CategoryIcon(category, size: 28)
-                        Text(category.name)
+                    NavigationLink {
+                        SubcategoriesView(category: category)
+                    } label: {
+                        HStack(spacing: 12) {
+                            CategoryIcon(category, size: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(category.name)
+                                let subcategories = category.sortedSubcategories
+                                if !subcategories.isEmpty {
+                                    Text(subcategories.map(\.name).joined(separator: ", "))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
                     }
                 }
                 .onDelete { offsets in
                     for index in offsets { context.delete(categories[index]) }
                     try? context.save()
                 }
+            } footer: {
+                Text("Tap a category to add subcategories.")
             }
         }
         .navigationTitle("Categories")
+    }
+}
+
+/// One category's subcategories: add, rename (tap), delete (swipe).
+private struct SubcategoriesView: View {
+    let category: ExpenseCategory
+
+    @Environment(\.modelContext) private var context
+    @State private var name = ""
+    @State private var renaming: ExpenseSubcategory?
+    @State private var newName = ""
+
+    private var subcategories: [ExpenseSubcategory] { category.sortedSubcategories }
+
+    private var trimmed: String { name.trimmingCharacters(in: .whitespaces) }
+
+    /// Two subcategories with one name under one category would be
+    /// indistinguishable in the picker.
+    private func isTaken(_ candidate: String, except: ExpenseSubcategory? = nil) -> Bool {
+        subcategories.contains {
+            $0 !== except && $0.name.caseInsensitiveCompare(candidate) == .orderedSame
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                HStack {
+                    TextField("Subcategory name", text: $name)
+                        .textInputAutocapitalization(.words)
+                    Button("Add", action: add)
+                        .disabled(trimmed.isEmpty || isTaken(trimmed))
+                }
+            } header: {
+                Text("Add")
+            } footer: {
+                if isTaken(trimmed) {
+                    Text("“\(category.name)” already has “\(trimmed)”.")
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            Section {
+                ForEach(subcategories) { subcategory in
+                    Button {
+                        newName = subcategory.name
+                        renaming = subcategory
+                    } label: {
+                        HStack(spacing: 12) {
+                            CategoryIcon(category, size: 28)
+                            Text(subcategory.name)
+                            Spacer()
+                            let count = subcategory.transactions?.count ?? 0
+                            Text(count == 1 ? "1 expense" : "\(count) expenses")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .foregroundStyle(.primary)
+                }
+                .onDelete { offsets in
+                    let doomed = offsets.map { subcategories[$0] }
+                    doomed.forEach(context.delete)
+                    try? context.save()
+                }
+            } footer: {
+                if subcategories.isEmpty {
+                    Text("Optional. Subcategories split a category further — Transport › Taxi — and appear in the form once the category is chosen.")
+                } else {
+                    Text("Deleting a subcategory keeps its expenses in “\(category.name)”.")
+                }
+            }
+        }
+        .navigationTitle(category.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("Name", text: $newName)
+            Button("Save") { rename() }
+            Button("Cancel", role: .cancel) { renaming = nil }
+        }
+    }
+
+    private func add() {
+        let next = (subcategories.map(\.sortOrder).max() ?? -1) + 1
+        context.insert(ExpenseSubcategory(name: trimmed, category: category, sortOrder: next))
+        try? context.save()
+        name = ""
+    }
+
+    private func rename() {
+        let candidate = newName.trimmingCharacters(in: .whitespaces)
+        if let renaming, !candidate.isEmpty, !isTaken(candidate, except: renaming) {
+            renaming.name = candidate
+            try? context.save()
+        }
+        renaming = nil
     }
 }
 

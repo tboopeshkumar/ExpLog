@@ -3,14 +3,18 @@ import SwiftData
 
 /// ExpLog's CSV format, both directions:
 ///
-///     Date,Amount,Currency,Merchant,Category,Account,Note,Reference
+///     Date,Amount,Currency,Merchant,Category,Account,Note,Reference,Subcategory
 ///
+/// Subcategory came later, so it's last and optional on import: files from
+/// before it still read.
 /// Export keeps the data from being trapped in the app; import restores an
 /// export and brings in history converted from elsewhere (see
 /// Tools/MoneyManagerImport). Dates are local date-times,
 /// "2026-09-20T21:25:42"; plain dates are accepted on import too.
 public enum CSV {
-    public static let header = ["Date", "Amount", "Currency", "Merchant", "Category", "Account", "Note", "Reference"]
+    public static let header = ["Date", "Amount", "Currency", "Merchant", "Category", "Account", "Note", "Reference", "Subcategory"]
+    /// Columns every file must have; Subcategory may be missing.
+    private static let requiredColumns = 8
 
     // MARK: - Export
 
@@ -26,6 +30,7 @@ public enum CSV {
                 transaction.account?.name ?? "",
                 transaction.note,
                 transaction.reference ?? "",
+                transaction.subcategory?.name ?? "",
             ]
             lines.append(fields.map(escape).joined(separator: ","))
         }
@@ -49,12 +54,15 @@ public enum CSV {
         /// 1-based line numbers of rows that couldn't be read, with the reason.
         public var rejected: [(line: Int, reason: String)] = []
         public var newCategories: [String] = []
+        /// "Transport › Taxi".
+        public var newSubcategories: [String] = []
         public var newAccounts: [String] = []
 
         public static func == (lhs: ImportResult, rhs: ImportResult) -> Bool {
             lhs.added == rhs.added && lhs.duplicates == rhs.duplicates
                 && lhs.rejected.map(\.line) == rhs.rejected.map(\.line)
                 && lhs.newCategories == rhs.newCategories && lhs.newAccounts == rhs.newAccounts
+                && lhs.newSubcategories == rhs.newSubcategories
         }
     }
 
@@ -67,7 +75,7 @@ public enum CSV {
             case .unreadable:
                 return "The file couldn't be read as UTF-8 text."
             case .wrongHeader(let found):
-                return "This isn't an ExpLog CSV. Expected the columns \(header.joined(separator: ", ")); found \(found)."
+                return "This isn't an ExpLog CSV. Expected the columns \(header.prefix(requiredColumns).joined(separator: ", ")); found \(found)."
             }
         }
     }
@@ -79,9 +87,11 @@ public enum CSV {
         let rows = parse(text)
         guard let first = rows.first else { return ImportResult() }
         let found = first.map { $0.trimmingCharacters(in: .whitespaces) }
-        guard found.prefix(header.count).map({ $0.lowercased() }) == header.map({ $0.lowercased() }) else {
+        guard found.prefix(requiredColumns).map({ $0.lowercased() })
+                == header.prefix(requiredColumns).map({ $0.lowercased() }) else {
             throw ImportError.wrongHeader(found: found.joined(separator: ", "))
         }
+        let hasSubcategories = found.count > requiredColumns && found[requiredColumns].lowercased() == "subcategory"
 
         var result = ImportResult()
         var categories = Dictionary(
@@ -93,6 +103,13 @@ public enum CSV {
             uniquingKeysWith: { first, _ in first }
         )
         var nextSortOrder = (categories.values.map(\.sortOrder).max() ?? -1) + 1
+        /// Keyed by category and subcategory name, both normalised.
+        var subcategories: [String: ExpenseSubcategory] = [:]
+        for category in categories.values {
+            for subcategory in category.subcategories ?? [] {
+                subcategories[key(category.name) + "\u{1F}" + key(subcategory.name)] = subcategory
+            }
+        }
         let alreadyStored = ExistingIndex(context: context)
 
         for (index, fields) in rows.dropFirst().enumerated() {
@@ -140,6 +157,23 @@ public enum CSV {
                 }
             }
 
+            // Needs a category to live under; one without is dropped rather
+            // than guessed.
+            var subcategory: ExpenseSubcategory?
+            if hasSubcategories, let category, !field(8).isEmpty {
+                let subKey = key(category.name) + "\u{1F}" + key(field(8))
+                if let existing = subcategories[subKey] {
+                    subcategory = existing
+                } else {
+                    let order = ((category.subcategories ?? []).map(\.sortOrder).max() ?? -1) + 1
+                    let created = ExpenseSubcategory(name: field(8), category: category, sortOrder: order)
+                    context.insert(created)
+                    subcategories[subKey] = created
+                    result.newSubcategories.append("\(category.name) › \(field(8))")
+                    subcategory = created
+                }
+            }
+
             var account: Account?
             if !field(5).isEmpty {
                 if let existing = accounts[key(field(5))] {
@@ -161,6 +195,7 @@ public enum CSV {
                 note: field(6),
                 reference: reference,
                 category: category,
+                subcategory: subcategory,
                 account: account
             ))
             result.added += 1

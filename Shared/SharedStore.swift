@@ -12,6 +12,7 @@ public enum SharedStore {
     public static let schema = Schema([
         Transaction.self,
         ExpenseCategory.self,
+        ExpenseSubcategory.self,
         Account.self,
         MerchantAlias.self,
     ])

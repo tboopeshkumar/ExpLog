@@ -45,9 +45,48 @@ public final class ExpenseCategory {
     @Relationship(deleteRule: .nullify, inverse: \Transaction.category)
     public var transactions: [Transaction]?
 
+    /// One optional level below: Transport › Taxi. Deleting a category takes
+    /// its subcategories with it; their expenses keep the category.
+    @Relationship(deleteRule: .cascade, inverse: \ExpenseSubcategory.category)
+    public var subcategories: [ExpenseSubcategory]?
+
+    @Relationship(deleteRule: .nullify, inverse: \MerchantAlias.category)
+    public var aliases: [MerchantAlias]?
+
     public init(name: String, symbol: String = "tag", sortOrder: Int = 0) {
         self.name = name
         self.symbol = symbol
+        self.sortOrder = sortOrder
+        self.createdAt = .now
+    }
+
+    /// Subcategories in display order.
+    public var sortedSubcategories: [ExpenseSubcategory] {
+        (subcategories ?? []).sorted {
+            ($0.sortOrder, $0.name.lowercased()) < ($1.sortOrder, $1.name.lowercased())
+        }
+    }
+}
+
+/// The optional second level of a category. Only one level: a subcategory has
+/// no subcategories. Drawn with its parent's icon and colour.
+@Model
+public final class ExpenseSubcategory {
+    public var name: String = ""
+    public var sortOrder: Int = 0
+    public var createdAt: Date = Date.now
+
+    public var category: ExpenseCategory?
+
+    @Relationship(deleteRule: .nullify, inverse: \Transaction.subcategory)
+    public var transactions: [Transaction]?
+
+    @Relationship(deleteRule: .nullify, inverse: \MerchantAlias.subcategory)
+    public var aliases: [MerchantAlias]?
+
+    public init(name: String, category: ExpenseCategory, sortOrder: Int = 0) {
+        self.name = name
+        self.category = category
         self.sortOrder = sortOrder
         self.createdAt = .now
     }
@@ -65,13 +104,19 @@ public final class MerchantAlias {
     public var useCount: Int = 0
     public var updatedAt: Date = Date.now
 
-    @Relationship(deleteRule: .nullify)
     public var category: ExpenseCategory?
+    public var subcategory: ExpenseSubcategory?
 
-    public init(key: String, displayName: String = "", category: ExpenseCategory? = nil) {
+    public init(
+        key: String,
+        displayName: String = "",
+        category: ExpenseCategory? = nil,
+        subcategory: ExpenseSubcategory? = nil
+    ) {
         self.key = key
         self.displayName = displayName
         self.category = category
+        self.subcategory = subcategory
         self.updatedAt = .now
     }
 }
@@ -95,6 +140,9 @@ public final class Transaction {
     public var createdAt: Date = Date.now
 
     public var category: ExpenseCategory?
+    /// Always one of `category`'s subcategories, or nil. TransactionDraft.save
+    /// enforces it.
+    public var subcategory: ExpenseSubcategory?
     public var account: Account?
 
     public init(
@@ -106,6 +154,7 @@ public final class Transaction {
         reference: String? = nil,
         rawMessage: String? = nil,
         category: ExpenseCategory? = nil,
+        subcategory: ExpenseSubcategory? = nil,
         account: Account? = nil
     ) {
         self.amount = amount
@@ -116,6 +165,7 @@ public final class Transaction {
         self.reference = reference
         self.rawMessage = rawMessage
         self.category = category
+        self.subcategory = subcategory?.category === category ? subcategory : nil
         self.account = account
         self.createdAt = .now
     }

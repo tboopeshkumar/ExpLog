@@ -116,6 +116,16 @@ public struct TransactionFormView: View {
                     }
                 }
 
+                // Only when the chosen category has any: most won't.
+                if let subcategories = draft.category?.sortedSubcategories, !subcategories.isEmpty {
+                    Picker("Subcategory", selection: $draft.subcategory) {
+                        Text("None").tag(ExpenseSubcategory?.none)
+                        ForEach(subcategories) { subcategory in
+                            Text(subcategory.name).tag(ExpenseSubcategory?.some(subcategory))
+                        }
+                    }
+                }
+
                 Picker("Account", selection: $draft.account) {
                     Text("None").tag(Account?.none)
                     ForEach(accounts) { account in

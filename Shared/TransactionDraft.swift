@@ -14,7 +14,11 @@ public final class TransactionDraft {
     public var reference: String?
     public var rawMessage: String?
 
-    public var category: ExpenseCategory?
+    public var category: ExpenseCategory? {
+        // A subcategory only makes sense under its own category.
+        didSet { if subcategory?.category !== category { subcategory = nil } }
+    }
+    public var subcategory: ExpenseSubcategory?
     public var account: Account?
 
     /// Fields the parser could not find, so the form can point at them.
@@ -39,6 +43,7 @@ public final class TransactionDraft {
         reference = transaction.reference
         rawMessage = transaction.rawMessage
         category = transaction.category
+        subcategory = transaction.subcategory
         account = transaction.account
     }
 
@@ -58,6 +63,7 @@ public final class TransactionDraft {
         if let alias = Self.alias(for: parsedMerchant, in: context) {
             if !alias.displayName.isEmpty { merchant = alias.displayName }
             category = alias.category
+            subcategory = alias.subcategory
         }
         parsedCard = parsed.card
         account = AccountMatching.account(for: parsed.raw, in: context)
@@ -119,6 +125,7 @@ public final class TransactionDraft {
         transaction.reference = reference
         transaction.rawMessage = rawMessage
         transaction.category = category
+        transaction.subcategory = subcategory?.category === category ? subcategory : nil
         transaction.account = account
 
         learnAlias(in: context)
@@ -135,8 +142,10 @@ public final class TransactionDraft {
         let key = parsedMerchant.lowercased()
         let display = merchant.trimmingCharacters(in: .whitespaces)
 
+        let subcategory = subcategory?.category === category ? subcategory : nil
         if let alias = Self.alias(for: parsedMerchant, in: context) {
             alias.category = category
+            alias.subcategory = subcategory
             alias.displayName = display == parsedMerchant ? "" : display
             alias.useCount += 1
             alias.updatedAt = .now
@@ -144,7 +153,8 @@ public final class TransactionDraft {
             let alias = MerchantAlias(
                 key: key,
                 displayName: display == parsedMerchant ? "" : display,
-                category: category
+                category: category,
+                subcategory: subcategory
             )
             alias.useCount = 1
             context.insert(alias)

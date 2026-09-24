@@ -85,6 +85,20 @@ when you tap Save.
 On-device, Settings → Test message parsing does the same as the first one
 interactively: paste a message, see exactly which fields were read.
 
+## Subcategories
+
+A category can have one optional level below it — Transport › Taxi — added in
+Settings → Categories by tapping the category. The form shows a Subcategory
+picker once the chosen category has any; changing the category clears a
+subcategory that belonged to the old one. Subcategories take their parent's
+icon and colour, are learned per merchant along with the category, and appear
+in the Summary drill-down as a By subcategory breakdown. Deleting a
+subcategory keeps its expenses in the category; deleting a category takes its
+subcategories with it.
+
+The CSV format gained a ninth column, Subcategory. It's optional on import, so
+files exported before it still read.
+
 ## Matching cards
 
 Each card in Settings → Cards & accounts has SMS keywords — text copied from
