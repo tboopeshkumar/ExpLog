@@ -18,24 +18,36 @@ public struct MonthSummary {
     }
 
     public let month: Date
+    /// Spending in the main currency. Other currencies are never added in.
     public let total: Decimal
+    /// Every expense in the month, whatever its currency.
     public let count: Int
-    /// Currency to display the totals in. Like the list's month totals, this
-    /// assumes a month is single-currency and takes the first transaction's.
+    /// The main currency: what `total` and `rows` are in.
     public let currencyCode: String
-    /// Largest first; uncategorised spending is its own row.
+    /// Largest first; uncategorised spending is its own row. Main currency
+    /// only, so the shares compare like with like.
     public let rows: [Row]
+    /// Spending in other currencies, per currency — shown beside the total,
+    /// not in it.
+    public let otherCurrencies: [Currency.Total]
 
-    public init(month: Date, transactions: [Transaction], calendar: Calendar = .current) {
+    public init(
+        month: Date,
+        transactions: [Transaction],
+        mainCurrency: String = Currency.main,
+        calendar: Calendar = .current
+    ) {
         let range = Formatting.monthRange(containing: month, calendar: calendar)
         let inMonth = transactions.filter { range.contains($0.date) }
+        let inMain = inMonth.filter { $0.currencyCode == mainCurrency }
 
         self.month = range.lowerBound
-        self.total = inMonth.reduce(Decimal(0)) { $0 + $1.amount }
+        self.total = inMain.reduce(Decimal(0)) { $0 + $1.amount }
         self.count = inMonth.count
-        self.currencyCode = inMonth.first?.currencyCode ?? "AED"
+        self.currencyCode = mainCurrency
+        self.otherCurrencies = Currency.totals(of: inMonth.filter { $0.currencyCode != mainCurrency }, main: mainCurrency)
 
-        let grouped = Dictionary(grouping: inMonth) { $0.category?.persistentModelID }
+        let grouped = Dictionary(grouping: inMain) { $0.category?.persistentModelID }
         let total = self.total
         self.rows = grouped.values
             .map { items in
@@ -75,8 +87,10 @@ public struct SubcategoryBreakdown {
 
     public let rows: [Row]
 
-    /// `transactions` should already be one category's, for one month.
-    public init(transactions: [Transaction]) {
+    /// `transactions` should already be one category's, for one month. Only
+    /// the main currency's are counted, so the shares compare like with like.
+    public init(transactions: [Transaction], mainCurrency: String = Currency.main) {
+        let transactions = transactions.filter { $0.currencyCode == mainCurrency }
         let total = transactions.reduce(Decimal(0)) { $0 + $1.amount }
         rows = Dictionary(grouping: transactions) { $0.subcategory?.persistentModelID }
             .values

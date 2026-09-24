@@ -86,6 +86,20 @@ let cases: [Expectation] = [
         merchant: "North Lane Pharmacy", card: "****7731",
         day: "2026-09-21", reference: nil
     ),
+    Expectation(
+        label: "US dollars, abroad",
+        message: "Your card XXXX4417 was used at HARBOR BOOKS NYC for USD 42.10 on 18-Sep.",
+        amount: Decimal(string: "42.10"), currency: "USD",
+        merchant: "Harbor Books Nyc", card: "XXXX4417",
+        day: "2026-09-18", reference: nil
+    ),
+    Expectation(
+        label: "Yen, no decimals",
+        message: "Thank you for using Card ending 6150 at SAKURA RAMEN for JPY 1,850. Avl. limit is AED XXX.05.",
+        amount: Decimal(string: "1850"), currency: "JPY",
+        merchant: "Sakura Ramen", card: "6150",
+        day: nil, reference: nil
+    ),
 ]
 
 /// Messages the parser must refuse, so an OTP never lands in the ledger.

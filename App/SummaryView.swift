@@ -14,9 +14,11 @@ struct SummaryView: View {
     private var transactions: [Transaction]
 
     @State private var month = Formatting.monthStart(.now)
+    /// Watched so the totals follow a change of main currency immediately.
+    @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
 
     private var summary: MonthSummary {
-        MonthSummary(month: month, transactions: transactions)
+        MonthSummary(month: month, transactions: transactions, mainCurrency: mainCurrency)
     }
 
     /// The furthest month worth stepping to: this one, or later when there are
@@ -42,7 +44,7 @@ struct SummaryView: View {
                         description: Text("Nothing logged in \(Formatting.monthTitle(month)).")
                     )
                 }
-            } else {
+            } else if !summary.rows.isEmpty {
                 Section("By category") {
                     ForEach(summary.rows) { row in
                         NavigationLink {
@@ -91,6 +93,12 @@ struct SummaryView: View {
                 .lineLimit(1)
             Text(summary.count == 1 ? "1 expense" : "\(summary.count) expenses")
                 .foregroundStyle(.secondary)
+            // Spending in other currencies: beside the total, never in it.
+            if !summary.otherCurrencies.isEmpty {
+                (Text("Plus ") + Formatting.totalsText(summary.otherCurrencies))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 4)
     }
@@ -186,7 +194,7 @@ private struct CategoryMonthView: View {
                             title: row.subcategory?.name ?? "No subcategory",
                             amount: row.amount,
                             share: row.share,
-                            currencyCode: matching.first?.currencyCode ?? "AED"
+                            currencyCode: Currency.main
                         )
                     }
                 }

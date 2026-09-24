@@ -79,8 +79,18 @@ public struct TransactionFormView: View {
     private var amountSection: some View {
         Section {
             HStack {
-                Formatting.currencySign(for: draft.currencyCode)
-                    .foregroundStyle(.secondary)
+                // Tap the sign to log an expense in another currency.
+                Menu {
+                    Picker("Currency", selection: $draft.currencyCode) {
+                        ForEach(Currency.pickerOrder, id: \.self) { code in
+                            Text("\(code) · \(Currency.name(for: code))").tag(code)
+                        }
+                    }
+                } label: {
+                    Formatting.currencySign(for: draft.currencyCode)
+                        .foregroundStyle(.tint)
+                        .accessibilityLabel("Currency: \(Currency.name(for: draft.currencyCode))")
+                }
                 TextField("0.00", value: $draft.amount, format: .number.precision(.fractionLength(0...2)))
                     .keyboardType(.decimalPad)
                     .font(.system(size: 34, weight: .semibold, design: .rounded))

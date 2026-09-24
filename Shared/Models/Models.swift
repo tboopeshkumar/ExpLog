@@ -124,7 +124,8 @@ public final class MerchantAlias {
 @Model
 public final class Transaction {
     public var amount: Decimal = Decimal(0)
-    public var currencyCode: String = "AED"
+    /// ISO 4217. Each expense keeps its own; see Currency.
+    public var currencyCode: String = Currency.fallback
     public var date: Date = Date.now
     public var merchant: String = ""
     public var note: String = ""
@@ -147,7 +148,7 @@ public final class Transaction {
 
     public init(
         amount: Decimal = 0,
-        currencyCode: String = "AED",
+        currencyCode: String = Currency.main,
         date: Date = .now,
         merchant: String = "",
         note: String = "",

@@ -9,10 +9,24 @@ struct SettingsView: View {
     @State private var exportURL: URL?
     @State private var exportError: String?
     @State private var showingImporter = false
+    @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
     @State private var importReport: ImportReport?
 
     var body: some View {
         List {
+            Section {
+                Picker(selection: $mainCurrency) {
+                    ForEach(Currency.pickerOrder, id: \.self) { code in
+                        Text("\(code) · \(Currency.name(for: code))").tag(code)
+                    }
+                } label: {
+                    Label("Main currency", systemImage: "banknote")
+                }
+                .pickerStyle(.navigationLink)
+            } footer: {
+                Text("New expenses start in \(Currency.name(for: mainCurrency)), and totals are counted in it. Spending in other currencies is shown beside the totals, not converted.")
+            }
+
             Section {
                 NavigationLink { AccountsView() } label: {
                     Label("Cards & accounts", systemImage: "creditcard")

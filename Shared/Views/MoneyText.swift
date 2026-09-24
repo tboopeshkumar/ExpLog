@@ -22,9 +22,19 @@ extension Formatting {
         return Text("\(dirhamSign)\u{202F}\(number)")
     }
 
-    /// The currency marker on its own, for a field's leading label.
+    /// Per-currency totals on one line, main currency first:
+    /// "Ð 1,465.12 + ₹2,500.00". Never one number across currencies.
+    public static func totalsText(_ totals: [Currency.Total]) -> Text {
+        guard let first = totals.first else { return moneyText(0, code: Currency.main) }
+        return totals.dropFirst().reduce(moneyText(first.amount, code: first.code)) { line, next in
+            line + Text(" + ") + moneyText(next.amount, code: next.code)
+        }
+    }
+
+    /// The currency marker on its own, for a field's leading label: the
+    /// Dirham sign, a symbol like "$" or "€", or the code where there's none.
     public static func currencySign(for code: String) -> Text {
-        code == "AED" ? Text(dirhamSign) : Text(code)
+        code == "AED" ? Text(dirhamSign) : Text(Currency.symbol(for: code))
     }
 
     private static var dirhamSign: Image {

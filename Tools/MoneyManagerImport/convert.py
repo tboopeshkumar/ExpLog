@@ -14,10 +14,12 @@ How rows become ExpLog transactions:
 
 - Date: "Period" is an Excel serial date-time in the phone's local time; it's
   written out as a local "yyyy-MM-ddTHH:mm:ss".
-- Amount: always the "AED" column, which Money Manager fills with the converted
-  value for foreign-currency rows. ExpLog's monthly totals assume one currency,
-  so an INR row comes in as its AED value, with the original rupee amount kept
-  in the note.
+- Amount: always the main-currency column — Money Manager names it after your
+  main currency ("AED") and fills it with the converted value for
+  foreign-currency rows. Rows come in in that currency, with any original
+  foreign amount kept in the note, so the history stays in one currency.
+  (ExpLog totals never add currencies together; converting here keeps a
+  year of imported history in the totals.)
 - Merchant: "Description" when present (it holds the merchant on the rows that
   use it), otherwise "Note", otherwise the subcategory or category.
 - Note: the Note when Description took the merchant slot, then any original
@@ -29,7 +31,7 @@ How rows become ExpLog transactions:
 - Income and transfer rows are skipped and counted; ExpLog records expenses.
 
 Nothing is written unless the output reconciles with the input: same number of
-expense rows, and the same AED total for every month.
+expense rows, and the same main-currency total for every month.
 """
 
 import csv
@@ -110,7 +112,19 @@ def category_key(name):
     return re.sub(r"[^\w&' ]+", "", name, flags=re.UNICODE).strip().lower()
 
 
-def convert(rows):
+KNOWN_COLUMNS = {"Period", "Accounts", "Category", "Subcategory", "Note",
+                 "Income/Expense", "Description", "Amount", "Currency"}
+
+
+def main_currency(rows):
+    """The header Money Manager names after the main currency, e.g. "AED"."""
+    codes = [name for name in rows[0] if name not in KNOWN_COLUMNS and re.fullmatch(r"[A-Z]{3}", name)]
+    if len(codes) != 1:
+        sys.exit(f"Couldn't find the main-currency column (found {codes or 'none'}).")
+    return codes[0]
+
+
+def convert(rows, main):
     out, skipped, problems = [], Counter(), []
     for line, row in enumerate(rows, start=2):
         kind = row.get("Income/Expense", "")
@@ -125,7 +139,7 @@ def convert(rows):
 
         try:
             when = excel_datetime(row["Period"])
-            amount = Decimal(row["AED"]).quantize(Decimal("0.01"))
+            amount = Decimal(row[main]).quantize(Decimal("0.01"))
         except Exception as error:  # noqa: BLE001 - report and carry on
             problems.append(f"line {line}: {error}")
             continue
@@ -137,15 +151,15 @@ def convert(rows):
         note_parts = []
         if description and note:
             note_parts.append(note)
-        currency = row.get("Currency", "AED").upper()
-        if currency != "AED":
+        currency = (row.get("Currency") or main).upper()
+        if currency != main:
             original = Decimal(row["Amount"]).quantize(Decimal("0.01"))
             note_parts.append(f"{currency} {original:,}")
 
         out.append({
             "Date": when.strftime("%Y-%m-%dT%H:%M:%S"),
             "Amount": f"{amount}",
-            "Currency": "AED",
+            "Currency": main,
             "Merchant": merchant,
             "Category": mapped or "",
             "Account": row.get("Accounts", ""),
@@ -175,13 +189,14 @@ def main():
         sys.exit(__doc__.split("\n\n")[1])
     source, target = sys.argv[1], sys.argv[2]
     rows = read_rows(source)
-    out, skipped, problems = convert(rows)
+    main = main_currency(rows)
+    out, skipped, problems = convert(rows, main)
 
     # Reconcile before writing anything.
     expenses = [r for r in rows if r.get("Income/Expense", "").lower().startswith("exp")]
     source_months, out_months = defaultdict(Decimal), defaultdict(Decimal)
     for r in expenses:
-        source_months[excel_datetime(r["Period"]).strftime("%Y-%m")] += Decimal(r["AED"])
+        source_months[excel_datetime(r["Period"]).strftime("%Y-%m")] += Decimal(r[main])
     for r in out:
         out_months[r["Date"][:7]] += Decimal(r["Amount"])
     mismatched = [m for m in source_months if source_months[m].quantize(Decimal("0.01")) != out_months[m]]
@@ -190,11 +205,13 @@ def main():
     print(f"  expenses converted: {len(out)} of {len(expenses)}")
     for kind, count in skipped.items():
         print(f"  skipped (not an expense): {count} x {kind!r}")
-    print(f"  total AED: {sum(Decimal(r['Amount']) for r in out):,}")
+    print(f"  main currency: {main}")
+    print(f"  total {main}: {sum(Decimal(r['Amount']) for r in out):,}")
     print(f"  months: {min(out_months)} to {max(out_months)} ({len(out_months)})")
     print(f"  categories: {dict(Counter(r['Category'] for r in out).most_common())}")
     print(f"  accounts: {len(set(r['Account'] for r in out))}")
-    print(f"  foreign-currency rows converted to AED: {sum(1 for r in out if 'INR ' in r['Note'])}")
+    foreign = sum(1 for r in rows if (r.get("Currency") or main).upper() != main)
+    print(f"  foreign-currency rows converted to {main}: {foreign}")
     dupes = likely_duplicates(out)
     if dupes:
         # Informational only: ExpLog's import checks duplicates against what was

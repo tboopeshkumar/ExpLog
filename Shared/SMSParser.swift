@@ -55,7 +55,7 @@ public enum SMSParser {
 
     // MARK: - Amount
 
-    private static let currencyCodes = "AED|SAR|QAR|KWD|BHD|OMR|USD|EUR|GBP|INR|PKR|LKR|PHP"
+    private static let currencyCodes = Currency.supported.joined(separator: "|")
 
     /// Anchored on "for <CUR> <amount>" first. Nearly every card alert also
     /// carries a second amount — available balance or credit limit — and

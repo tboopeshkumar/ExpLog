@@ -7,7 +7,7 @@ import Observation
 @Observable
 public final class TransactionDraft {
     public var amount: Decimal = 0
-    public var currencyCode: String = "AED"
+    public var currencyCode: String = Currency.main
     public var date: Date = .now
     public var merchant: String = ""
     public var note: String = ""
@@ -51,7 +51,7 @@ public final class TransactionDraft {
     /// message itself cannot supply by looking at what was saved before.
     public init(parsed: ParsedTransaction, context: ModelContext, receivedAt: Date = .now) {
         amount = parsed.amount ?? 0
-        currencyCode = parsed.currency ?? "AED"
+        currencyCode = parsed.currency ?? Currency.main
         date = parsed.date ?? receivedAt
         reference = parsed.reference
         rawMessage = parsed.raw

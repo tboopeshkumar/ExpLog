@@ -153,7 +153,7 @@ public enum CSV {
                 continue
             }
 
-            let currencyCode = field(2).isEmpty ? "AED" : field(2).uppercased()
+            let currencyCode = field(2).isEmpty ? Currency.main : field(2).uppercased()
             let reference = field(7).isEmpty ? nil : field(7)
 
             let stored = alreadyStored.matches(merchant: merchant, amount: amount, date: date, reference: reference)

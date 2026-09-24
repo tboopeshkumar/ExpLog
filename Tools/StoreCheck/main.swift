@@ -24,6 +24,13 @@ func run() throws {
         }
     }
 
+    // Pin the main currency to AED in a private settings store, so results
+    // don't depend on this Mac's region or leave anything behind.
+    let settingsSuite = "ExpLogChecks-\(UUID().uuidString)"
+    Currency.defaults = UserDefaults(suiteName: settingsSuite)!
+    Currency.setMain("AED")
+    defer { UserDefaults().removePersistentDomain(forName: settingsSuite) }
+
     // A fresh on-disk store, standing in for the App Group container.
     let storeURL = URL(fileURLWithPath: NSTemporaryDirectory())
         .appending(path: "ExpLogCheck-\(UUID().uuidString).store")
@@ -458,6 +465,70 @@ func run() throws {
            "…and a second run doesn't move on to the other")
     expect(CSV.removingNotePart("taxi", from: "Airport · Taxi") == "Airport", "note parts match ignoring case")
     expect(CSV.removingNotePart("Taxi", from: "Taxi rank") == "Taxi rank", "only whole parts are removed")
+
+    print("\nCURRENCIES\n")
+
+    // Choosing the main currency, in a throwaway settings store.
+    let probeSuite = "ExpLogCurrencyProbe-\(UUID().uuidString)"
+    let probe = UserDefaults(suiteName: probeSuite)!
+    defer { UserDefaults().removePersistentDomain(forName: probeSuite) }
+    let pinned = Currency.defaults
+    Currency.defaults = probe
+    expect(Currency.supported.contains(Currency.main), "with nothing chosen, main is a supported currency")
+    Currency.setMain("XYZ")
+    expect(probe.string(forKey: "mainCurrency") == nil, "an unsupported code is refused")
+
+    // First launch with existing data: adopt what most expenses use.
+    let adoptURL = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: "adopt-\(UUID()).store")
+    defer { try? FileManager.default.removeItem(at: adoptURL) }
+    let adoptContext = ModelContext(try ModelContainer(
+        for: SharedStoreSchema.schema,
+        configurations: [ModelConfiguration(schema: SharedStoreSchema.schema, url: adoptURL)]
+    ))
+    for code in ["INR", "INR", "INR", "USD"] {
+        adoptContext.insert(Transaction(amount: 1, currencyCode: code, merchant: "x"))
+    }
+    try adoptContext.save()
+    Currency.adoptMainIfUnset(from: adoptContext)
+    expect(Currency.main == "INR", "first launch adopts the currency most expenses use", Currency.main)
+    Currency.setMain("GBP")
+    Currency.adoptMainIfUnset(from: adoptContext)
+    expect(Currency.main == "GBP", "…and never overrides a choice")
+    expect(Currency.pickerOrder.first == "GBP" && Set(Currency.pickerOrder) == Set(Currency.supported),
+           "pickers list the main currency first")
+    Currency.defaults = pinned
+
+    // Never one number across currencies.
+    let mixedCurrencies: [Transaction] = [
+        Transaction(amount: 100, currencyCode: "AED", date: .now, merchant: "a", category: transport),
+        Transaction(amount: 50, currencyCode: "AED", date: .now, merchant: "b", category: freshDining),
+        Transaction(amount: 2500, currencyCode: "INR", date: .now, merchant: "c", category: transport),
+        Transaction(amount: 40, currencyCode: "USD", date: .now, merchant: "d", category: transport),
+    ]
+    let totals = Currency.totals(of: mixedCurrencies, main: "AED")
+    expect(totals.map(\.code) == ["AED", "INR", "USD"] && totals.first?.amount == 150,
+           "totals are per currency, main first", "\(totals.map { "\($0.code) \($0.amount)" })")
+    expect(Currency.totals(of: mixedCurrencies, main: "USD").first?.code == "USD", "switching main reorders, nothing converts")
+
+    let mixedMonth = MonthSummary(month: .now, transactions: mixedCurrencies, mainCurrency: "AED")
+    expect(mixedMonth.total == 150, "the Summary total counts only the main currency", "\(mixedMonth.total)")
+    expect(mixedMonth.count == 4, "…while the expense count includes all of them")
+    expect(mixedMonth.rows.reduce(Decimal(0)) { $0 + $1.amount } == 150 && mixedMonth.rows.count == 2,
+           "category rows compare like with like")
+    expect(mixedMonth.otherCurrencies.map(\.code) == ["INR", "USD"], "other currencies are listed beside it")
+    expect(SubcategoryBreakdown(transactions: mixedCurrencies, mainCurrency: "AED").rows.reduce(Decimal(0)) { $0 + $1.amount } == 150,
+           "the subcategory breakdown counts only the main currency")
+
+    // New expenses and imports start in the main currency.
+    expect(TransactionDraft().currencyCode == Currency.main, "a new expense starts in the main currency")
+    let noCode = try CSV.importRows(from: """
+    Date,Amount,Currency,Merchant,Category,Account,Note,Reference
+    2026-03-01T10:00:00,9.00,,No code given,,,,
+    2026-03-02T10:00:00,9.00,usd,Lower case,,,,
+    """, into: fresh)
+    expect(noCode.added == 2, "rows imported")
+    expect(try storedAs("No code given").first?.currencyCode == Currency.main, "a row without a currency takes the main one")
+    expect(try storedAs("Lower case").first?.currencyCode == "USD", "a given currency is kept")
 
     do {
         _ = try CSV.importRows(from: "Name,Value\nx,1\n", into: fresh)

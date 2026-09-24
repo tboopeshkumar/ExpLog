@@ -10,6 +10,8 @@ struct TransactionListView: View {
     @State private var editing: TransactionDraft?
     @State private var searchText = ""
     @State private var showsUpcoming = false
+    /// Watched so totals reorder the moment the main currency changes.
+    @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
 
     private var filtered: [Transaction] {
         guard !searchText.isEmpty else { return transactions }
@@ -43,7 +45,7 @@ struct TransactionListView: View {
                     Button {
                         withAnimation { showsUpcoming.toggle() }
                     } label: {
-                        UpcomingRow(items: upcoming, expanded: expandUpcoming)
+                        UpcomingRow(items: upcoming, expanded: expandUpcoming, mainCurrency: mainCurrency)
                     }
                     .buttonStyle(.plain)
                     .disabled(!searchText.isEmpty)
@@ -111,8 +113,7 @@ struct TransactionListView: View {
     }
 
     private func total(of items: [Transaction]) -> Text {
-        let sum = items.reduce(Decimal(0)) { $0 + $1.amount }
-        return Formatting.moneyText(sum, code: items.first?.currencyCode ?? "AED")
+        Formatting.totalsText(Currency.totals(of: items, main: mainCurrency))
     }
 
     private func delete(_ offsets: IndexSet, in items: [Transaction]) {
@@ -166,9 +167,9 @@ extension TransactionDraft: Identifiable {
 private struct UpcomingRow: View {
     let items: [Transaction]
     let expanded: Bool
+    let mainCurrency: String
 
     var body: some View {
-        let total = items.reduce(Decimal(0)) { $0 + $1.amount }
         let dates = items.map(\.date)
         HStack(spacing: 12) {
             Image(systemName: "calendar.badge.clock")
@@ -185,7 +186,7 @@ private struct UpcomingRow: View {
                 }
             }
             Spacer()
-            Formatting.moneyText(total, code: items.first?.currencyCode ?? "AED")
+            Formatting.totalsText(Currency.totals(of: items, main: mainCurrency))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
             Image(systemName: "chevron.right")

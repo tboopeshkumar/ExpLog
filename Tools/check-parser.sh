@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 mkdir -p .build
 swiftc -O -o .build/parsercheck \
     Shared/ParsedTransaction.swift \
+    Shared/Currency.swift \
     Shared/SMSParser.swift \
     Tools/ParserCheck/main.swift
 exec ./.build/parsercheck

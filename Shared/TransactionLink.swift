@@ -65,7 +65,7 @@ public enum TransactionLink {
 
         let draft = TransactionDraft()
         draft.amount = amount
-        draft.currencyCode = values[Key.currency] ?? "AED"
+        draft.currencyCode = values[Key.currency] ?? Currency.main
         draft.merchant = values[Key.merchant] ?? ""
         draft.note = values[Key.note] ?? ""
         draft.reference = values[Key.reference]

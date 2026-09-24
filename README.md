@@ -261,6 +261,23 @@ told apart — system red and pink measure ΔE 3.3 against a floor of 15 — so 
 chart doesn't rely on them: the bars show size, and the coloured icon and name
 beside each bar say which category it is.
 
+## Currencies
+
+Every expense keeps its own currency (ISO 4217 code). Settings → Main currency
+picks the default for new expenses and the currency totals are counted in; on
+first launch it's set from whichever currency most existing expenses use, else
+the device's region. The form's currency sign is a menu, for spending abroad,
+and the parser recognises about thirty major currencies in alerts
+(`Shared/Currency.swift`).
+
+Totals never add currencies together — there are no exchange rates. Month
+headers read "Ð 1,465.12 + ₹2,500.00"; the Summary counts the main currency
+in its total and shares and lists other currencies beside it. Rules in
+`Shared/CurrencySettings.swift`, covered by `check-store.sh`.
+
+The Money Manager converter reads the main currency from the export's
+converted-amount column, which Money Manager names after it.
+
 ## The Dirham sign
 
 Amounts in AED show the UAE Dirham sign (U+20C3) rather than "AED". No iOS 27
@@ -278,8 +295,6 @@ way to the plain character.
 - No App Intents target, so no fully hands-off Shortcuts automation yet. The
   parser and `TransactionDraft` are the hard part and are already shared, so
   adding one later is a small target, not a rewrite.
-- Monthly totals assume a single currency; a mixed-currency month sums the
-  numbers and labels them with the first transaction's currency.
 - No budgets or recurring transactions. Out of scope by choice.
 - The share sheet flow has not been exercised through the UI — the extension is
   built, embedded and registered for text, and everything it does on Save is
