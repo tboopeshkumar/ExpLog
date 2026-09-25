@@ -14,6 +14,8 @@ struct SummaryView: View {
     private var transactions: [Transaction]
 
     @State private var month = Formatting.monthStart(.now)
+    /// Category or merchant view; remembered between launches.
+    @AppStorage("summaryBreakdown") private var breakdown: Breakdown = .category
     /// Watched so the totals follow a change of main currency immediately.
     @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
 
@@ -45,20 +47,46 @@ struct SummaryView: View {
                     )
                 }
             } else if !summary.rows.isEmpty {
-                Section("By category") {
-                    ForEach(summary.rows) { row in
-                        NavigationLink {
-                            CategoryMonthView(category: row.category, month: month)
-                        } label: {
-                            ShareRow(
-                                category: row.category,
-                                title: row.category?.name ?? "Uncategorised",
-                                amount: row.amount,
-                                share: row.share,
-                                currencyCode: summary.currencyCode
-                            )
+                Section {
+                    switch breakdown {
+                    case .category:
+                        ForEach(summary.rows) { row in
+                            NavigationLink {
+                                MonthExpensesView(scope: .category(row.category), month: month)
+                            } label: {
+                                ShareRow(
+                                    category: row.category,
+                                    title: row.category?.name ?? "Uncategorised",
+                                    amount: row.amount,
+                                    share: row.share,
+                                    currencyCode: summary.currencyCode
+                                )
+                            }
+                        }
+                    case .merchant:
+                        ForEach(merchantRows) { row in
+                            NavigationLink {
+                                MonthExpensesView(scope: .merchant(key: row.key, name: row.name), month: month)
+                            } label: {
+                                ShareRow(
+                                    category: row.category,
+                                    title: row.name,
+                                    amount: row.amount,
+                                    share: row.share,
+                                    currencyCode: summary.currencyCode,
+                                    count: row.count
+                                )
+                            }
                         }
                     }
+                } header: {
+                    Picker("Breakdown", selection: $breakdown) {
+                        Text("Category").tag(Breakdown.category)
+                        Text("Merchant").tag(Breakdown.merchant)
+                    }
+                    .pickerStyle(.segmented)
+                    .textCase(nil)
+                    .padding(.bottom, 4)
                 }
             }
         }
@@ -103,6 +131,15 @@ struct SummaryView: View {
         .padding(.vertical, 4)
     }
 
+    /// This month's merchants, main currency only.
+    private var merchantRows: [MerchantBreakdown.Row] {
+        let range = Formatting.monthRange(containing: month)
+        return MerchantBreakdown(
+            transactions: transactions.filter { range.contains($0.date) },
+            mainCurrency: mainCurrency
+        ).rows
+    }
+
     private func step(_ months: Int) {
         guard let next = Calendar.current.date(byAdding: .month, value: months, to: month) else { return }
         month = Formatting.monthStart(next)
@@ -110,13 +147,16 @@ struct SummaryView: View {
 }
 
 /// One line of a breakdown: icon and name, amount and share, and a share bar.
-/// Used for categories and, in the drill-down, their subcategories.
+/// Used for categories, subcategories and merchants.
 private struct ShareRow: View {
     let category: ExpenseCategory?
     let title: String
     let amount: Decimal
     let share: Double
     let currencyCode: String
+    /// How many expenses, where that says something — "12×" at a merchant.
+    /// Shown from two up.
+    var count: Int? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -125,6 +165,14 @@ private struct ShareRow: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(title)
                         .lineLimit(1)
+                    // Once is the default; only repeat visits are worth a mark.
+                    if let count, count > 1 {
+                        Text("\(count)×")
+                            .font(.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(count == 1 ? "1 expense" : "\(count) expenses")
+                    }
                     Spacer(minLength: 8)
                     // Tabular digits so amounts align down the column.
                     Formatting.moneyText(amount, code: currencyCode)
@@ -165,30 +213,62 @@ private struct ShareBar: View {
     }
 }
 
-/// One category's transactions in one month, opened from a summary row.
-private struct CategoryMonthView: View {
-    let category: ExpenseCategory?
+/// One month's expenses for a category or a merchant, opened from a summary
+/// row. A category also gets its breakdowns: by subcategory, and by merchant.
+private struct MonthExpensesView: View {
+    enum Scope {
+        case category(ExpenseCategory?)
+        /// MerchantBreakdown.key, and the name to show.
+        case merchant(key: String, name: String)
+    }
+
+    let scope: Scope
     let month: Date
 
     @Query(sort: \Transaction.date, order: .reverse)
     private var transactions: [Transaction]
 
     @State private var editing: TransactionDraft?
+    @State private var showsAllMerchants = false
+
+    /// Merchants shown before "Show all", so a long tail doesn't push the
+    /// expenses off the screen.
+    private let merchantPreview = 5
 
     private var matching: [Transaction] {
         let range = Formatting.monthRange(containing: month)
-        return transactions.filter {
-            range.contains($0.date) && $0.category?.persistentModelID == category?.persistentModelID
+        return transactions.filter { transaction in
+            guard range.contains(transaction.date) else { return false }
+            switch scope {
+            case .category(let category):
+                return transaction.category?.persistentModelID == category?.persistentModelID
+            case .merchant(let key, _):
+                return MerchantBreakdown.key(for: transaction.merchant) == key
+            }
+        }
+    }
+
+    private var title: String {
+        switch scope {
+        case .category(let category): return category?.name ?? "Uncategorised"
+        case .merchant(_, let name): return name
         }
     }
 
     var body: some View {
         let matching = matching
-        let breakdown = SubcategoryBreakdown(transactions: matching)
+        let category: ExpenseCategory? = if case .category(let category) = scope { category } else { nil }
+        let isCategory = if case .category = scope { true } else { false }
+        let subcategories = SubcategoryBreakdown(transactions: matching)
+        let merchants = MerchantBreakdown(transactions: matching)
+        let showsSubcategories = isCategory && subcategories.isWorthShowing
+        // One merchant would be a row saying "100%".
+        let showsMerchants = isCategory && merchants.rows.count > 1
+
         List {
-            if breakdown.isWorthShowing {
+            if showsSubcategories {
                 Section("By subcategory") {
-                    ForEach(breakdown.rows) { row in
+                    ForEach(subcategories.rows) { row in
                         ShareRow(
                             category: category,
                             title: row.subcategory?.name ?? "No subcategory",
@@ -199,7 +279,31 @@ private struct CategoryMonthView: View {
                     }
                 }
             }
-            Section(breakdown.isWorthShowing ? "Expenses" : "") {
+            if showsMerchants {
+                Section("By merchant") {
+                    let shown = showsAllMerchants ? merchants.rows : Array(merchants.rows.prefix(merchantPreview))
+                    ForEach(shown) { row in
+                        NavigationLink {
+                            MonthExpensesView(scope: .merchant(key: row.key, name: row.name), month: month)
+                        } label: {
+                            ShareRow(
+                                category: category,
+                                title: row.name,
+                                amount: row.amount,
+                                share: row.share,
+                                currencyCode: Currency.main,
+                                count: row.count
+                            )
+                        }
+                    }
+                    if merchants.rows.count > merchantPreview {
+                        Button(showsAllMerchants ? "Show fewer" : "Show all \(merchants.rows.count) merchants") {
+                            withAnimation { showsAllMerchants.toggle() }
+                        }
+                    }
+                }
+            }
+            Section(showsSubcategories || showsMerchants ? "Expenses" : "") {
                 ForEach(matching) { transaction in
                     Button {
                         editing = TransactionDraft(editing: transaction)
@@ -210,10 +314,10 @@ private struct CategoryMonthView: View {
                 }
             }
         }
-        .navigationTitle(category?.name ?? "Uncategorised")
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .overlay {
-            // Recategorising the last one empties this list.
+            // Editing the last one out of this scope empties the list.
             if matching.isEmpty {
                 ContentUnavailableView("No expenses", systemImage: "tray")
             }
@@ -230,4 +334,8 @@ private struct CategoryMonthView: View {
             }
         }
     }
+}
+
+enum Breakdown: String {
+    case category, merchant
 }

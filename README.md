@@ -278,9 +278,13 @@ repository: they're real spending.
 
 ## Monthly summary
 
-The Summary tab shows one month's total and its spending by category, ranked,
-with each row's share as a bar; tapping a row lists that category's expenses
-for the month. The totals come from `Shared/MonthSummary.swift`, which is
+The Summary tab shows one month's total and its spending by category or by
+merchant (a switch it remembers), ranked, with each row's share as a bar.
+Tapping a category opens its month: a breakdown by subcategory and by merchant
+(top five, then "Show all"), then the expenses. Tapping a merchant lists its
+expenses. Merchant names group ignoring case and extra spaces, shown under the
+most common spelling; different names stay separate rather than being merged
+on a guess. The totals come from `Shared/MonthSummary.swift`, which is
 covered by `check-store.sh`.
 
 The share bars are deliberately one colour. Nine category colours can't all be

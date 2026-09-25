@@ -115,3 +115,73 @@ public struct SubcategoryBreakdown {
         rows.contains { $0.subcategory != nil }
     }
 }
+
+/// Spending grouped by merchant, largest first — for the Summary's merchant
+/// view and a category's drill-down.
+///
+/// Merchant names are grouped by a normalised key, ignoring case and extra
+/// spaces, so "LULU Hypermarket" and "Lulu  hypermarket" are one row, shown
+/// under whichever spelling is most common. Different names stay apart —
+/// "Lulu" and "Lulu Center" may well be different shops, and merging on a
+/// guess would be worse than two rows. Main currency only, like the other
+/// breakdowns, so the shares compare like with like.
+public struct MerchantBreakdown {
+    public struct Row: Identifiable {
+        public let key: String
+        public let name: String
+        public let amount: Decimal
+        public let count: Int
+        public let share: Double
+        /// The category most of this merchant's expenses are in, for its icon.
+        public let category: ExpenseCategory?
+
+        public var id: String { key }
+    }
+
+    public let rows: [Row]
+
+    public init(transactions: [Transaction], mainCurrency: String = Currency.main) {
+        let inMain = transactions.filter { $0.currencyCode == mainCurrency }
+        let total = inMain.reduce(Decimal(0)) { $0 + $1.amount }
+        rows = Dictionary(grouping: inMain) { Self.key(for: $0.merchant) }
+            .map { key, items in
+                let amount = items.reduce(Decimal(0)) { $0 + $1.amount }
+                return Row(
+                    key: key,
+                    name: Self.mostCommon(items.map { Self.tidy($0.merchant) }) ?? "Unnamed",
+                    amount: amount,
+                    count: items.count,
+                    share: total > 0 ? NSDecimalNumber(decimal: amount / total).doubleValue : 0,
+                    category: Self.mostCommonCategory(of: items)
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.amount != rhs.amount { return lhs.amount > rhs.amount }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+    }
+
+    /// The grouping key: lower-cased, spaces collapsed.
+    public static func key(for merchant: String) -> String {
+        tidy(merchant).lowercased()
+    }
+
+    private static func tidy(_ merchant: String) -> String {
+        merchant.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// Most frequent value; `max(by:)` keeps the first of equals, so ties go
+    /// to the first seen.
+    private static func mostCommon(_ values: [String]) -> String? {
+        var counts: [String: Int] = [:]
+        for value in values { counts[value, default: 0] += 1 }
+        return values.max { counts[$0]! < counts[$1]! }
+    }
+
+    private static func mostCommonCategory(of items: [Transaction]) -> ExpenseCategory? {
+        let categorised = items.compactMap(\.category)
+        var counts: [PersistentIdentifier: Int] = [:]
+        for category in categorised { counts[category.persistentModelID, default: 0] += 1 }
+        return categorised.max { counts[$0.persistentModelID]! < counts[$1.persistentModelID]! }
+    }
+}

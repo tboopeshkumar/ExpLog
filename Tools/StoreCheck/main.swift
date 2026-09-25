@@ -530,6 +530,33 @@ func run() throws {
     expect(try storedAs("No code given").first?.currencyCode == Currency.main, "a row without a currency takes the main one")
     expect(try storedAs("Lower case").first?.currencyCode == "USD", "a given currency is kept")
 
+    print("\nMERCHANTS\n")
+
+    let shopping: [Transaction] = [
+        Transaction(amount: 40, currencyCode: "AED", merchant: "Lulu Hypermarket", category: transport),
+        Transaction(amount: 20, currencyCode: "AED", merchant: "LULU  Hypermarket", category: freshDining),
+        Transaction(amount: 10, currencyCode: "AED", merchant: " lulu hypermarket", category: freshDining),
+        Transaction(amount: 25, currencyCode: "AED", merchant: "Lulu Center", category: freshDining),
+        Transaction(amount: 25, currencyCode: "AED", merchant: "Bakery", category: freshDining),
+        Transaction(amount: 900, currencyCode: "INR", merchant: "Lulu Hypermarket", category: freshDining),
+    ]
+    let merchants = MerchantBreakdown(transactions: shopping, mainCurrency: "AED")
+    expect(merchants.rows.first?.amount == 70 && merchants.rows.first?.count == 3,
+           "case and extra spaces are one merchant", "\(merchants.rows.map { "\($0.name) \($0.amount)" })")
+    expect(merchants.rows.first?.name == "Lulu Hypermarket",
+           "each spelling used once: the first seen is shown", merchants.rows.first?.name ?? "")
+    expect(merchants.rows.contains { $0.name == "Lulu Center" }, "a different name stays its own row")
+    expect(merchants.rows.map(\.name).suffix(2) == ["Bakery", "Lulu Center"], "ties ordered by name")
+    expect(merchants.rows.reduce(Decimal(0)) { $0 + $1.amount } == 120, "main currency only — the INR expense isn't in")
+    expect(abs(merchants.rows.reduce(0) { $0 + $1.share } - 1) < 0.000001, "shares add up to 100%")
+    expect(merchants.rows.first?.category === freshDining, "icon from the merchant's most common category")
+    let spellings = MerchantBreakdown(transactions: [
+        Transaction(amount: 1, currencyCode: "AED", merchant: "LULU"),
+        Transaction(amount: 1, currencyCode: "AED", merchant: "Lulu"),
+        Transaction(amount: 1, currencyCode: "AED", merchant: "Lulu"),
+    ], mainCurrency: "AED")
+    expect(spellings.rows.first?.name == "Lulu", "the most common spelling wins")
+
     do {
         _ = try CSV.importRows(from: "Name,Value\nx,1\n", into: fresh)
         expect(false, "a non-ExpLog CSV is refused")
