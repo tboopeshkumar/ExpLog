@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Convert a Money Manager (Realbyte) Excel export into an ExpLog CSV.
 
-    python3 Tools/MoneyManagerImport/convert.py <export.xlsx> <out.csv>
+    python3 Tools/MoneyManagerImport/convert.py <export.xlsx> <out.csv> [--map my-categories.json]
 
 Then AirDrop the CSV to the phone and use Settings -> Import CSV in ExpLog.
 
@@ -26,8 +26,10 @@ How rows become ExpLog transactions:
   foreign amount, joined with " · ".
 - Subcategory: Money Manager's, as-is; ExpLog creates it under the mapped
   category on import.
-- Category: mapped through CATEGORY_MAP. An unmapped category stops the
-  conversion rather than being guessed.
+- Category: mapped through CATEGORY_MAP onto ExpLog's defaults where there's
+  an equivalent. Anything else keeps its own name (emoji removed) and ExpLog
+  creates it on import; the report lists these. --map takes a JSON object of
+  {"Money Manager name": "ExpLog name"} that overrides or extends the map.
 - Income and transfer rows are skipped and counted; ExpLog records expenses.
 
 Nothing is written unless the output reconciles with the input: same number of
@@ -36,6 +38,7 @@ expense rows, and the same main-currency total for every month.
 
 import csv
 import datetime
+import json
 import re
 import sys
 import zipfile
@@ -44,9 +47,10 @@ from decimal import Decimal
 from xml.etree import ElementTree as ET
 
 # Money Manager category (emoji and spacing stripped, lower-cased) -> ExpLog
-# category. Names that aren't ExpLog defaults (Education, Household, Rent) are
-# created by the import, with their own icons.
+# category, for the ones with an ExpLog equivalent: Money Manager's defaults,
+# plus common additions. Unlisted categories come through under their own name.
 CATEGORY_MAP = {
+    "culture": "Entertainment",
     "groceries": "Groceries",
     "food": "Dining",
     "transport": "Transport",
@@ -124,7 +128,12 @@ def main_currency(rows):
     return codes[0]
 
 
-def convert(rows, main):
+def display_name(category):
+    """'🐶 Pets ' -> 'Pets'."""
+    return re.sub(r"[^\w&' ]+", "", category, flags=re.UNICODE).strip() or category.strip()
+
+
+def convert(rows, main, category_map, passed_through):
     out, skipped, problems = [], Counter(), []
     for line, row in enumerate(rows, start=2):
         kind = row.get("Income/Expense", "")
@@ -132,10 +141,11 @@ def convert(rows, main):
             skipped[kind or "(blank)"] += 1
             continue
 
-        mapped = CATEGORY_MAP.get(category_key(row.get("Category", "")))
+        mapped = category_map.get(category_key(row.get("Category", "")))
         if row.get("Category") and mapped is None:
-            problems.append(f"line {line}: unmapped category {row['Category']!r}")
-            continue
+            # No ExpLog equivalent: keep the category, under its own name.
+            mapped = display_name(row["Category"])
+            passed_through.add(mapped)
 
         try:
             when = excel_datetime(row["Period"])
@@ -185,12 +195,20 @@ def likely_duplicates(out):
 
 
 def main():
-    if len(sys.argv) != 3:
+    args = sys.argv[1:]
+    category_map = dict(CATEGORY_MAP)
+    if "--map" in args:
+        index = args.index("--map")
+        with open(args[index + 1], encoding="utf-8") as f:
+            category_map.update({category_key(k): v for k, v in json.load(f).items()})
+        del args[index:index + 2]
+    if len(args) != 2:
         sys.exit(__doc__.split("\n\n")[1])
-    source, target = sys.argv[1], sys.argv[2]
+    source, target = args
     rows = read_rows(source)
     main = main_currency(rows)
-    out, skipped, problems = convert(rows, main)
+    passed_through = set()
+    out, skipped, problems = convert(rows, main, category_map, passed_through)
 
     # Reconcile before writing anything.
     expenses = [r for r in rows if r.get("Income/Expense", "").lower().startswith("exp")]
@@ -210,6 +228,8 @@ def main():
     print(f"  months: {min(out_months)} to {max(out_months)} ({len(out_months)})")
     print(f"  categories: {dict(Counter(r['Category'] for r in out).most_common())}")
     print(f"  accounts: {len(set(r['Account'] for r in out))}")
+    if passed_through:
+        print(f"  kept under their own name (no ExpLog equivalent): {', '.join(sorted(passed_through))}")
     foreign = sum(1 for r in rows if (r.get("Currency") or main).upper() != main)
     print(f"  foreign-currency rows converted to {main}: {foreign}")
     dupes = likely_duplicates(out)

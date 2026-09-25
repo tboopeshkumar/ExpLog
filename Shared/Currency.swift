@@ -18,6 +18,17 @@ public enum Currency {
         "EGP", "JOD", "TRY", "ZAR",
     ]
 
+    /// Digits after the decimal point (ISO 4217 minor units): 0 for yen and
+    /// won, 3 for the dinars and the Omani rial, 2 for the rest here. Decides
+    /// whether "12.345" is twelve and a bit, or twelve thousand.
+    public static func minorUnits(of code: String) -> Int {
+        switch code {
+        case "JPY", "KRW": return 0
+        case "KWD", "BHD", "OMR", "JOD": return 3
+        default: return 2
+        }
+    }
+
     /// Last resort when nothing better is known.
     public static let fallback = "USD"
 

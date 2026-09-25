@@ -58,6 +58,17 @@ It handles the traps these messages set:
   `Round Clock Mart Superma`; words with digits keep their case, so `20THFLOOR`
   survives intact.
 
+Amounts and dates are read however the bank writes them, not only the way
+UAE banks do:
+
+- `1,234.56`, `1.234,56` and `12,50` all read correctly: with both separators
+  the last is the decimal point; a lone one followed by one or two digits is
+  decimal. A lone one followed by exactly three digits is settled by the
+  currency — `KWD 12.345` is three-decimal dinars, `JPY 1,850` is yen.
+- Numeric dates that read either way (`09/05/2026`) take whichever reading is
+  nearest the message's arrival, since an alert arrives within a day or two of
+  the purchase. ISO (`2026-09-20`) and dotted (`20.09.2026`) dates work too.
+
 Every transaction keeps its original SMS in `rawMessage`, so a parser bug can be
 fixed months later without losing data.
 
@@ -131,31 +142,44 @@ Saving a transaction with a category records a `MerchantAlias` for that
 merchant. The next alert from the same place arrives already categorised. No
 training step, no rules to configure — it just gets quieter over time.
 
-## Setup
+## Building your own copy
 
-One-time, after Xcode finishes installing:
+ExpLog isn't on the App Store; you build it onto your own iPhone. You need a
+Mac with Xcode and an Apple ID — a free one works (see below).
 
-```bash
-brew install xcodegen
-```
+1. Install the project generator:
 
-```bash
-xcodegen generate && open ExpLog.xcodeproj
-```
+   ```bash
+   brew install xcodegen
+   ```
 
-Then in Xcode:
+2. Give the build your identity. Copy the example config and fill in your
+   Apple team ID and a bundle-ID prefix of your own:
 
-1. Select the **ExpLog** target → Signing & Capabilities → pick your team.
-2. Do the same for the **ShareExtension** target.
+   ```bash
+   cp Config/Local.xcconfig.example Config/Local.xcconfig
+   ```
 
-Bundle identifiers are `com.boopeshkumar.explog` and `.share`. They only have to
-be globally unique — change them in `project.yml` and re-run `xcodegen generate`
-if you'd rather use a domain you own. If you change the App Group ID, change it
-in all three places: `project.yml` (both targets) and `SharedStore.appGroupID`.
+   `Config/Local.xcconfig` is git-ignored, so your identity never lands in the
+   repository. Everything that depends on it — bundle IDs, the keychain group,
+   the App Group — is derived from those two values. Your team ID is in Xcode →
+   Settings → Accounts, or in the OU field of your "Apple Development"
+   certificate. Without the file the build uses `com.example` and no team.
 
-Build and run. Press ⌘R.
+3. Generate the project and open it:
 
-### Getting it onto your phone
+   ```bash
+   xcodegen generate && open ExpLog.xcodeproj
+   ```
+
+4. Pick your iPhone as the destination and press ⌘R. The first run asks you to
+   trust the developer on the phone: Settings → General → VPN & Device
+   Management.
+
+Then set it up for your cards and currency in the app: Settings → Main
+currency, and Settings → Cards & accounts with each card's SMS keywords.
+
+### Apple ID: free or paid
 
 - **Free Apple ID** — works. The build expires after 7 days and has to be
   re-run from Xcode, and App Groups aren't available, so the extension takes the
@@ -243,9 +267,12 @@ Export from Money Manager to Excel, then convert on the Mac:
 python3 Tools/MoneyManagerImport/convert.py export.xlsx ExpLog-import.csv
 ```
 
-The converter maps categories (see `CATEGORY_MAP`), brings foreign-currency
-rows in at Money Manager's AED value with the original amount in the note, and
-refuses to write anything unless every month's total matches the source.
+The converter maps categories with an ExpLog equivalent (see `CATEGORY_MAP`)
+and keeps any other category under its own name; `--map my.json` overrides or
+extends the mapping. Foreign-currency rows come in at Money Manager's
+main-currency value, with the original amount in the note. It writes nothing
+unless every month's total matches the source. `check-convert.py` tests it on
+a synthetic export.
 AirDrop the CSV to the phone and import it. Keep both files out of this
 repository: they're real spending.
 
@@ -291,6 +318,11 @@ alerts still write "AED". Once iOS fonts include U+20C3, the symbol can give
 way to the plain character.
 
 ## Known gaps
+
+- SMS are read in English. Banks that send alerts only in Arabic or another
+  language aren't understood; Settings → Test message parsing shows what a
+  message yields.
+- The app's own text is English only.
 
 - No App Intents target, so no fully hands-off Shortcuts automation yet. The
   parser and `TransactionDraft` are the hard part and are already shared, so

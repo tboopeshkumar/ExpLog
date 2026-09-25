@@ -5,7 +5,9 @@ set -e
 cd "$(dirname "$0")/.."
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 SIM="${1:?usage: seed-demo.sh <simulator-udid>}"
-APP_ID="com.boopeshkumar.explog"
+# The bundle ID of the simulator build, whatever prefix it was built with.
+APP_ID="${EXPLOG_APP_ID:-$(plutil -extract CFBundleIdentifier raw .build/dd/Build/Products/Debug-iphonesimulator/ExpLog.app/Info.plist 2>/dev/null)}"
+[ -n "$APP_ID" ] || { echo "Build for the simulator first, or set EXPLOG_APP_ID."; exit 1; }
 
 # Prefer the App Group container; fall back to the app's own, which is where the
 # store lives when App Groups aren't available (free Apple ID).

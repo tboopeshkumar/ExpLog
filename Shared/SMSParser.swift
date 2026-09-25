@@ -62,11 +62,11 @@ public enum SMSParser {
     /// picking that one up would be worse than failing outright.
     private static var amountPatterns: [String] {
         [
-            #"\bfor\s+(\#(currencyCodes))\s*[.:]?\s*([\d,]+(?:\.\d{1,2})?)"#,
-            #"\b(\#(currencyCodes))\s*[.:]?\s*([\d,]+(?:\.\d{1,2})?)\s+(?:was |has been )?(?:spent|debited|charged|paid|used)"#,
-            #"\b(?:amount|txn|transaction)\s+of\s+(\#(currencyCodes))\s*[.:]?\s*([\d,]+(?:\.\d{1,2})?)"#,
-            // Last resort: the first properly-formed currency amount present.
-            #"\b(\#(currencyCodes))\s*[.:]?\s*([\d,]+\.\d{2})\b"#,
+            #"\bfor\s+(\#(currencyCodes))\s*[.:]?\s*(\d[\d.,]*)"#,
+            #"\b(\#(currencyCodes))\s*[.:]?\s*(\d[\d.,]*)\s+(?:was |has been )?(?:spent|debited|charged|paid|used)"#,
+            #"\b(?:amount|txn|transaction)\s+of\s+(\#(currencyCodes))\s*[.:]?\s*(\d[\d.,]*)"#,
+            // Last resort: the first currency amount that has a decimal part.
+            #"\b(\#(currencyCodes))\s*[.:]?\s*(\d[\d.,]*[.,]\d{2,3})\b"#,
         ]
     }
 
@@ -74,15 +74,43 @@ public enum SMSParser {
         for pattern in amountPatterns {
             guard let groups = firstMatch(of: pattern, in: text), groups.count >= 3,
                   let currency = groups[1], let rawAmount = groups[2],
-                  let amount = decimal(from: rawAmount) else { continue }
+                  let amount = decimal(from: rawAmount, currency: currency.uppercased()) else { continue }
             return (currency.uppercased(), amount)
         }
         return nil
     }
 
-    private static func decimal(from string: String) -> Decimal? {
-        let cleaned = string.replacingOccurrences(of: ",", with: "")
-        guard let value = Decimal(string: cleaned, locale: Locale(identifier: "en_US_POSIX")),
+    /// Reads an amount whichever way the bank writes it: "1,234.56",
+    /// "1.234,56", "12,50", "1,850", "12.345".
+    ///
+    /// - Both separators present: the last one is the decimal point.
+    /// - One separator, repeated ("1,234,567"): thousands.
+    /// - One separator followed by one or two digits ("12,50"): decimal.
+    /// - One separator followed by exactly three digits is the ambiguous case:
+    ///   a decimal point for currencies with three decimal places (KWD 12.345),
+    ///   a thousands separator for the rest (JPY 1,850; EUR 1.850).
+    static func decimal(from raw: String, currency: String) -> Decimal? {
+        // A sentence can end right after the amount: "AED 2.25."
+        let string = raw.trimmingCharacters(in: CharacterSet(charactersIn: ".,"))
+        let separators = string.filter { $0 == "." || $0 == "," }
+        let lastSeparator = string.lastIndex { $0 == "." || $0 == "," }
+
+        var normalized: String
+        if let lastSeparator, Set(separators).count == 2 {
+            let decimalMark = string[lastSeparator]
+            normalized = string.filter { $0 != (decimalMark == "." ? "," : ".") }
+                .replacingOccurrences(of: String(decimalMark), with: ".")
+        } else if let lastSeparator, separators.count == 1 {
+            let digitsAfter = string.distance(from: lastSeparator, to: string.endIndex) - 1
+            let isDecimal = digitsAfter <= 2 || (digitsAfter == 3 && Currency.minorUnits(of: currency) == 3)
+            normalized = isDecimal
+                ? string.replacingOccurrences(of: String(string[lastSeparator]), with: ".")
+                : string.filter(\.isNumber)
+        } else {
+            normalized = string.filter(\.isNumber)
+        }
+
+        guard let value = Decimal(string: normalized, locale: Locale(identifier: "en_US_POSIX")),
               value > 0 else { return nil }
         return value
     }
@@ -168,17 +196,26 @@ public enum SMSParser {
     /// 20-Sep" resolves to the date and not to the word after the first "on".
     private static let datePatterns = [
         #"\bon\s+(\d{1,2}[-/ ][A-Za-z]{3,9}(?:[-/ ]\d{2,4})?)"#,
-        #"\bon\s+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})"#,
+        #"\bon\s+(\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})"#,
+        #"\bon\s+(\d{4}-\d{1,2}-\d{1,2})"#,
         #"\b(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})\b"#,
         #"\b(\d{1,2}[-/][A-Za-z]{3,9})\b"#,
+        // Numeric dates without "on" — "dated 20.09.2026", "2026-09-20".
+        #"\b(\d{1,2}[/.]\d{1,2}[/.]\d{4})\b"#,
+        #"\b(\d{4}-\d{2}-\d{2})\b"#,
     ]
 
     private static let dateFormats = [
         "d-MMM-yyyy", "d-MMM-yy", "d-MMM",
         "d/MMM/yyyy", "d/MMM/yy", "d/MMM",
         "d MMM yyyy", "d MMM yy", "d MMM",
-        "d-MM-yyyy", "d-MM-yy",
-        "d/MM/yyyy", "d/MM/yy",
+    ]
+
+    /// Both orders, day-first and month-first; parseDateToken chooses.
+    private static let numericDateFormats = [
+        "d-M-yyyy", "d-M-yy", "d/M/yyyy", "d/M/yy", "d.M.yyyy", "d.M.yy",
+        "M-d-yyyy", "M-d-yy", "M/d/yyyy", "M/d/yy", "M.d.yyyy", "M.d.yy",
+        "yyyy-M-d", "yyyy/M/d",
     ]
 
     private static func matchDate(in text: String, receivedAt: Date) -> Date? {
@@ -216,6 +253,21 @@ public enum SMSParser {
         formatter.timeZone = .current
         formatter.calendar = calendar
         formatter.isLenient = false
+
+        // An all-digit date ("09/05/2026") reads either way round: 9 May or
+        // 5 September. A card alert arrives within a day or two of the
+        // purchase, so take whichever reading is nearest the message's
+        // arrival — more reliable than guessing the bank's convention from the
+        // phone's region.
+        if normalized.allSatisfy({ $0.isNumber || $0 == "/" || $0 == "-" || $0 == "." }) {
+            let readings = numericDateFormats.compactMap { format -> Date? in
+                formatter.dateFormat = format
+                return formatter.date(from: normalized)
+            }
+            return readings
+                .min { abs($0.timeIntervalSince(receivedAt)) < abs($1.timeIntervalSince(receivedAt)) }
+                .map { calendar.startOfDay(for: $0) }
+        }
 
         for format in dateFormats {
             formatter.dateFormat = format

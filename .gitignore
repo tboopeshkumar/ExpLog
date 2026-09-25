@@ -29,3 +29,6 @@ xcuserdata/
 *.xls
 ExpLog-import*.csv
 ExpLog-*.csv
+
+# Personal build identity (team ID, bundle prefix).
+Config/Local.xcconfig

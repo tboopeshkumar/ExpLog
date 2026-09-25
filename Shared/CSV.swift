@@ -286,6 +286,15 @@ public enum CSV {
         "education": "book",
         "household": "sofa",
         "rent": "house",
+        "pets": "pawprint",
+        "gift": "gift",
+        "gifts": "gift",
+        "insurance": "shield",
+        "kids": "figure.and.child.holdinghands",
+        "children": "figure.and.child.holdinghands",
+        "fitness": "figure.run",
+        "personal care": "comb",
+        "beauty": "comb",
     ]
 
     private static func key(_ name: String) -> String {

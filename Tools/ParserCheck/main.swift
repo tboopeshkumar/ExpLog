@@ -100,6 +100,55 @@ let cases: [Expectation] = [
         merchant: "Sakura Ramen", card: "6150",
         day: nil, reference: nil
     ),
+    Expectation(
+        label: "Kuwaiti dinar, three decimals",
+        message: "Your card XXXX1234 was used at SOUQ SHARQ for KWD 12.345 on 20-Sep.",
+        amount: Decimal(string: "12.345"), currency: "KWD",
+        merchant: "Souq Sharq", card: "XXXX1234",
+        day: "2026-09-20", reference: nil
+    ),
+    Expectation(
+        label: "Omani rial, trailing zero",
+        message: "Your card XXXX1234 was used at MUTTRAH MART for OMR 3.500 on 19-Sep.",
+        amount: Decimal(string: "3.5"), currency: "OMR",
+        merchant: "Muttrah Mart", card: "XXXX1234",
+        day: "2026-09-19", reference: nil
+    ),
+    Expectation(
+        label: "European thousands and decimal comma",
+        message: "Your card XXXX1234 was used at MARKTHALLE for EUR 1.234,56 on 18.09.2026.",
+        amount: Decimal(string: "1234.56"), currency: "EUR",
+        merchant: "Markthalle", card: "XXXX1234",
+        day: "2026-09-18", reference: nil
+    ),
+    Expectation(
+        label: "European decimal comma",
+        message: "Your card XXXX1234 was used at KAFFEEHAUS for EUR 12,50 on 18.09.2026.",
+        amount: Decimal(string: "12.50"), currency: "EUR",
+        merchant: "Kaffeehaus", card: "XXXX1234",
+        day: "2026-09-18", reference: nil
+    ),
+    Expectation(
+        label: "US date, reads either way",
+        message: "Your card XXXX1234 was used at CORNER DELI for USD 5.00 on 09/05/2026.",
+        amount: Decimal(string: "5.00"), currency: "USD",
+        merchant: "Corner Deli", card: "XXXX1234",
+        day: "2026-09-05", reference: nil
+    ),
+    Expectation(
+        label: "US date, month first only",
+        message: "Your card XXXX1234 was used at CORNER DELI for USD 7.25 on 09/19/2026.",
+        amount: Decimal(string: "7.25"), currency: "USD",
+        merchant: "Corner Deli", card: "XXXX1234",
+        day: "2026-09-19", reference: nil
+    ),
+    Expectation(
+        label: "ISO date",
+        message: "Your card XXXX1234 was used at HARBOUR CAFE for SGD 8.80 on 2026-09-17.",
+        amount: Decimal(string: "8.80"), currency: "SGD",
+        merchant: "Harbour Cafe", card: "XXXX1234",
+        day: "2026-09-17", reference: nil
+    ),
 ]
 
 /// Messages the parser must refuse, so an OTP never lands in the ledger.

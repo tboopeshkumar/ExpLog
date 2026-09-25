@@ -1,0 +1,8 @@
+// Copy to Config/Local.xcconfig (git-ignored) and fill in.
+
+// Reverse-DNS prefix you own. The app becomes <prefix>.explog.
+EXPLOG_BUNDLE_ID_PREFIX = com.yourname
+
+// Your Apple team ID: Xcode → Settings → Accounts, or the OU field of your
+// "Apple Development" certificate. A free Personal Team works.
+DEVELOPMENT_TEAM = ABCDE12345

@@ -1,0 +1,11 @@
+// Build identity: the Apple team that signs the app, and the prefix its
+// bundle ID, keychain group and App Group are built from.
+//
+// Don't put your own values here. Copy Local.xcconfig.example to
+// Local.xcconfig (git-ignored) and set them there — see the README,
+// "Building your own copy".
+
+EXPLOG_BUNDLE_ID_PREFIX = com.example
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

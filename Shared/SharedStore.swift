@@ -5,9 +5,10 @@ import SwiftData
 /// the share extension read and write the same database.
 public enum SharedStore {
 
-    /// Must match the App Group capability on BOTH targets, and the value in
-    /// project.yml. Change it together with the bundle identifiers.
-    public static let appGroupID = "group.com.boopeshkumar.explog"
+    /// "group.<prefix>.explog", built from the bundle-ID prefix in
+    /// Config/Local.xcconfig and passed in through Info.plist, so it always
+    /// matches the entitlement. Empty outside an app bundle (the Mac tests).
+    public static let appGroupID = Bundle.main.object(forInfoDictionaryKey: "ExpLogAppGroup") as? String ?? ""
 
     public static let schema = Schema([
         Transaction.self,
@@ -24,7 +25,8 @@ public enum SharedStore {
     /// sandbox — so the extension hands transactions to the app through a
     /// `explog://` URL instead of writing them itself. See TransactionLink.
     public static var isAppGroupAvailable: Bool {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) != nil
+        !appGroupID.isEmpty
+            && FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) != nil
     }
 
     public static func storeURL() throws -> URL {
@@ -49,7 +51,7 @@ public enum SharedStore {
             url: try storeURL()
             // To enable iCloud sync later: add the iCloud capability with a
             // CloudKit container to both targets, then add
-            //     cloudKitDatabase: .private("iCloud.com.boopeshkumar.explog")
+            //     cloudKitDatabase: .private("iCloud.<your bundle-ID prefix>.explog")
             // here. The schema above is already shaped for it, so no migration
             // is needed.
         )
