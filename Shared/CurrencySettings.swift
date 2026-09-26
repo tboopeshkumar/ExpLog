@@ -47,6 +47,61 @@ extension Currency {
         }
     }
 
+    // MARK: - Exchange rates
+
+    /// Where the current rates live, as a JSON string (see ExchangeRates).
+    /// They're only the default for expenses logged from now on: each expense
+    /// stores its own rate when saved.
+    public static let exchangeRatesKey = "exchangeRates"
+
+    /// Current rates from the main currency.
+    public static var exchangeRates: ExchangeRates {
+        ExchangeRates(main: main, json: defaults.string(forKey: exchangeRatesKey) ?? "")
+    }
+
+    /// One main-currency total for `transactions`, each converted at the rate
+    /// it was logged with. Anything that can't be converted — no stored rate —
+    /// is left out and returned per currency, to show beside the total.
+    public static func mainTotal(
+        of transactions: [Transaction],
+        main: String = Currency.main
+    ) -> (total: Decimal, unconverted: [Total]) {
+        var total = Decimal(0)
+        var unconverted: [Transaction] = []
+        for transaction in transactions {
+            if let value = transaction.amount(in: main) {
+                total += value
+            } else {
+                unconverted.append(transaction)
+            }
+        }
+        return (total, totals(of: unconverted, main: main))
+    }
+
+    /// Expenses in `code` that have no rate: logged before one was set, so
+    /// they're left out of totals.
+    public static func unrated(_ code: String, in transactions: [Transaction]) -> [Transaction] {
+        transactions.filter { $0.currencyCode == code && $0.exchangeRate == nil }
+    }
+
+    /// Gives those expenses `rate` against `main`. Only ones without a rate:
+    /// an expense that already has one keeps it. Returns how many changed.
+    @discardableResult
+    public static func applyRate(
+        _ rate: Decimal,
+        toUnrated code: String,
+        main: String,
+        in transactions: [Transaction]
+    ) -> Int {
+        guard rate > 0, code != main else { return 0 }
+        let targets = unrated(code, in: transactions)
+        for transaction in targets {
+            transaction.exchangeRate = rate
+            transaction.rateBase = main
+        }
+        return targets.count
+    }
+
     // MARK: - Totals
 
     public struct Total: Equatable {

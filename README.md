@@ -107,8 +107,9 @@ in the Summary drill-down as a By subcategory breakdown. Deleting a
 subcategory keeps its expenses in the category; deleting a category takes its
 subcategories with it.
 
-The CSV format gained a ninth column, Subcategory. It's optional on import, so
-files exported before it still read. Importing a file again fills in the
+The CSV format gained a ninth column, Subcategory, and later two more for each
+expense's exchange rate. All are optional on import, so older files still
+read. Importing a file again fills in the
 subcategory on expenses that are already stored but lack one — how history
 imported before subcategories gets them — matched to each row's exact twin by
 time, and only where the stored expense still has the row's category. The copy
@@ -301,10 +302,20 @@ the device's region. The form's currency sign is a menu, for spending abroad,
 and the parser recognises about thirty major currencies in alerts
 (`Shared/Currency.swift`).
 
-Totals never add currencies together — there are no exchange rates. Month
-headers read "Ð 1,465.12 + ₹2,500.00"; the Summary counts the main currency
-in its total and shares and lists other currencies beside it. Rules in
-`Shared/CurrencySettings.swift`, covered by `check-store.sh`.
+Totals are always in the main currency. Settings → Exchange rates holds the
+current rate for each other currency (1 AED = 22.70 INR); an expense in another
+currency takes that rate when it's logged and **keeps it** — changing the rate
+later affects only expenses logged afterwards, so past totals never move. The
+form shows an expense's rate and can adjust it for that one expense, and each
+foreign expense shows what it counted as ("≈ Ð 110.13").
+
+An expense with no rate — logged before one was set — can't be counted, so it's
+shown beside the total ("Ð 1,465.12 + ₹2,500.00") rather than guessed at. The
+rates screen offers, per currency, to give those older expenses the current
+rate; it never changes an expense that already has one. CSV export and import
+carry each expense's rate; imported history isn't given today's rate. Rules in
+`Shared/CurrencySettings.swift` and `Shared/ExchangeRates.swift`, covered by
+`check-store.sh`.
 
 The Money Manager converter reads the main currency from the export's
 converted-amount column, which Money Manager names after it.

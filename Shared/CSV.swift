@@ -3,16 +3,21 @@ import SwiftData
 
 /// ExpLog's CSV format, both directions:
 ///
-///     Date,Amount,Currency,Merchant,Category,Account,Note,Reference,Subcategory
+///     Date,Amount,Currency,Merchant,Category,Account,Note,Reference,
+///     Subcategory,Exchange rate,Rate base
 ///
-/// Subcategory came later, so it's last and optional on import: files from
-/// before it still read.
+/// The last three came later, so they're optional on import: files from
+/// before them still read. Exchange rate and Rate base are an expense's own
+/// rate (22.70, AED for 1 AED = 22.70 INR), kept so a restore doesn't lose them.
 /// Export keeps the data from being trapped in the app; import restores an
 /// export and brings in history converted from elsewhere (see
 /// Tools/MoneyManagerImport). Dates are local date-times,
 /// "2026-09-20T21:25:42"; plain dates are accepted on import too.
 public enum CSV {
-    public static let header = ["Date", "Amount", "Currency", "Merchant", "Category", "Account", "Note", "Reference", "Subcategory"]
+    public static let header = [
+        "Date", "Amount", "Currency", "Merchant", "Category", "Account", "Note", "Reference",
+        "Subcategory", "Exchange rate", "Rate base",
+    ]
     /// Columns every file must have; Subcategory may be missing.
     private static let requiredColumns = 8
 
@@ -31,6 +36,8 @@ public enum CSV {
                 transaction.note,
                 transaction.reference ?? "",
                 transaction.subcategory?.name ?? "",
+                transaction.exchangeRate.map { "\($0)" } ?? "",
+                transaction.rateBase ?? "",
             ]
             lines.append(fields.map(escape).joined(separator: ","))
         }
@@ -102,6 +109,9 @@ public enum CSV {
             throw ImportError.wrongHeader(found: found.joined(separator: ", "))
         }
         let hasSubcategories = found.count > requiredColumns && found[requiredColumns].lowercased() == "subcategory"
+        let hasRates = found.count > requiredColumns + 2
+            && found[requiredColumns + 1].lowercased() == "exchange rate"
+            && found[requiredColumns + 2].lowercased() == "rate base"
 
         var result = ImportResult()
         var categories = Dictionary(
@@ -219,7 +229,7 @@ public enum CSV {
                 }
             }
 
-            context.insert(Transaction(
+            let transaction = Transaction(
                 amount: amount,
                 currencyCode: currencyCode,
                 date: date,
@@ -229,7 +239,15 @@ public enum CSV {
                 category: category,
                 subcategory: rowSubcategory,
                 account: account
-            ))
+            )
+            // Only the rate the file carries. Imported history is from the
+            // past, so today's rate from Settings isn't applied to it.
+            if hasRates, let rate = Decimal(string: field(9), locale: Locale(identifier: "en_US_POSIX")),
+               rate > 0, !field(10).isEmpty {
+                transaction.exchangeRate = rate
+                transaction.rateBase = field(10).uppercased()
+            }
+            context.insert(transaction)
             result.added += 1
         }
 

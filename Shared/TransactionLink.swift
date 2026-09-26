@@ -20,6 +20,8 @@ public enum TransactionLink {
         static let note = "note"
         static let reference = "ref"
         static let card = "card"
+        static let rate = "rate"
+        static let rateBase = "rateBase"
         static let raw = "raw"
     }
 
@@ -39,6 +41,10 @@ public enum TransactionLink {
         if !draft.note.isEmpty { items.append(URLQueryItem(name: Key.note, value: draft.note)) }
         if let reference = draft.reference { items.append(URLQueryItem(name: Key.reference, value: reference)) }
         if let card = draft.parsedCard { items.append(URLQueryItem(name: Key.card, value: card)) }
+        if let rate = draft.exchangeRate, let base = draft.rateBase {
+            items.append(URLQueryItem(name: Key.rate, value: "\(rate)"))
+            items.append(URLQueryItem(name: Key.rateBase, value: base))
+        }
         if let raw = draft.rawMessage { items.append(URLQueryItem(name: Key.raw, value: raw)) }
 
         components.queryItems = items
@@ -65,7 +71,14 @@ public enum TransactionLink {
 
         let draft = TransactionDraft()
         draft.amount = amount
+        // Setting the currency picks up the app's current rate for it...
         draft.currencyCode = values[Key.currency] ?? Currency.main
+        // ...unless the share form already had one, which wins.
+        if let rate = values[Key.rate].flatMap({ Decimal(string: $0, locale: Locale(identifier: "en_US_POSIX")) }),
+           let base = values[Key.rateBase] {
+            draft.exchangeRate = rate
+            draft.rateBase = base
+        }
         draft.merchant = values[Key.merchant] ?? ""
         draft.note = values[Key.note] ?? ""
         draft.reference = values[Key.reference]

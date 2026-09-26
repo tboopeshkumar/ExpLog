@@ -96,7 +96,32 @@ public struct TransactionFormView: View {
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
                     .focused($amountFocused)
             }
+
+            // Another currency: the rate this expense counts at. Starts from
+            // Settings and stays with the expense once saved, so a later rate
+            // change leaves it alone.
+            if draft.currencyCode != Currency.main {
+                HStack(spacing: 8) {
+                    (Text("1 ") + Formatting.currencySign(for: draft.rateBase ?? Currency.main) + Text(" ="))
+                        .foregroundStyle(.secondary)
+                    TextField("Rate", value: $draft.exchangeRate, format: .number.precision(.fractionLength(0...6)))
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                    Text(draft.currencyCode)
+                        .monospaced()
+                        .foregroundStyle(.secondary)
+                }
+            }
         } footer: {
+            if draft.currencyCode != Currency.main {
+                if let rate = draft.exchangeRate, rate > 0 {
+                    (Text("Counts as ") + Formatting.moneyText(draft.amount / rate, code: draft.rateBase ?? Currency.main)
+                        + Text(" in your totals."))
+                } else {
+                    Text("No exchange rate: this expense won't count in your totals until it has one.")
+                }
+            }
             if !draft.unparsedFields.isEmpty {
                 Label(
                     "Couldn't read: \(draft.unparsedFields.joined(separator: ", ")). Check before saving.",

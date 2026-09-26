@@ -23,8 +23,12 @@ struct SettingsView: View {
                     Label("Main currency", systemImage: "banknote")
                 }
                 .pickerStyle(.navigationLink)
+
+                NavigationLink { ExchangeRatesView() } label: {
+                    Label("Exchange rates", systemImage: "arrow.left.arrow.right")
+                }
             } footer: {
-                Text("New expenses start in \(Currency.name(for: mainCurrency)), and totals are counted in it. Spending in other currencies is shown beside the totals, not converted.")
+                Text("New expenses start in \(Currency.name(for: mainCurrency)), and totals are counted in it. Other currencies count at the rate each expense was logged with.")
             }
 
             Section {
@@ -149,6 +153,138 @@ private struct ImportReport {
             lines.append("Couldn't read \(result.rejected.count): \(shown.joined(separator: "; "))\(more).")
         }
         message = lines.joined(separator: "\n\n")
+    }
+}
+
+// MARK: - Exchange rates
+
+/// The current rate for each other currency. Used for expenses logged from
+/// now on — each expense keeps the rate it was logged with, so changing one
+/// here leaves past totals alone.
+struct ExchangeRatesView: View {
+    @Environment(\.modelContext) private var context
+    @Query private var transactions: [Transaction]
+    @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
+    @AppStorage(Currency.exchangeRatesKey, store: Currency.defaults) private var ratesJSON = ""
+    @State private var added: [String] = []
+
+    private var rates: ExchangeRates { ExchangeRates(main: mainCurrency, json: ratesJSON) }
+
+    /// Currencies spent in, then any with a rate, then any added here.
+    private var listed: [String] {
+        let spent = Set(transactions.map(\.currencyCode))
+        return Currency.supported.filter { code in
+            code != mainCurrency && (spent.contains(code) || rates.rate(for: code) != nil || added.contains(code))
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                if listed.isEmpty {
+                    Text("No other currencies yet. You can add a rate before you travel.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(listed, id: \.self) { code in
+                    RateRow(
+                        code: code,
+                        main: mainCurrency,
+                        unratedCount: Currency.unrated(code, in: transactions).count,
+                        ratesJSON: $ratesJSON,
+                        applyToUnrated: { rate in
+                            Currency.applyRate(rate, toUnrated: code, main: mainCurrency, in: transactions)
+                            try? context.save()
+                        }
+                    )
+                }
+            } header: {
+                Text("From \(Currency.name(for: mainCurrency))")
+            } footer: {
+                Text("New expenses in these currencies take this rate, and keep it: changing a rate here doesn't change expenses already logged. You can also adjust the rate on a single expense.")
+            }
+
+            let addable = Currency.pickerOrder.filter { $0 != mainCurrency && !listed.contains($0) }
+            if !addable.isEmpty {
+                Section {
+                    Menu {
+                        ForEach(addable, id: \.self) { code in
+                            Button("\(code) · \(Currency.name(for: code))") { added.append(code) }
+                        }
+                    } label: {
+                        Label("Add a currency", systemImage: "plus")
+                    }
+                }
+            }
+        }
+        .navigationTitle("Exchange rates")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// "1 AED = [22.70] INR", what a round amount comes to, and — when older
+/// expenses in this currency have no rate — an offer to give them this one.
+private struct RateRow: View {
+    let code: String
+    let main: String
+    let unratedCount: Int
+    @Binding var ratesJSON: String
+    let applyToUnrated: (Decimal) -> Void
+
+    @State private var text = ""
+
+    private var rate: Decimal? {
+        Decimal(string: text.replacingOccurrences(of: ",", with: "."), locale: Locale(identifier: "en_US_POSIX"))
+            .flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                (Text("1 ") + Formatting.currencySign(for: main) + Text(" ="))
+                    .foregroundStyle(.secondary)
+                TextField("Rate", text: $text)
+                    .keyboardType(.decimalPad)
+                    .monospacedDigit()
+                    .multilineTextAlignment(.trailing)
+                Text(code)
+                    .monospaced()
+            }
+            Group {
+                if let rate {
+                    // A round amount of the other currency, and what it comes to.
+                    let sample = Decimal(100) * rate >= 1000 ? Decimal(1000) : Decimal(100)
+                    Formatting.moneyText(sample, code: code) + Text(" ≈ ") + Formatting.moneyText(sample / rate, code: main)
+                } else if text.isEmpty {
+                    Text("\(Currency.name(for: code)) — no rate yet")
+                } else {
+                    Text("Enter a number, like 22.70")
+                        .foregroundStyle(.orange)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            // Expenses logged before any rate existed are out of the totals
+            // for good unless given one. Offered, never done automatically.
+            if let rate, unratedCount > 0 {
+                Button(unratedCount == 1
+                       ? "Apply to 1 earlier expense without a rate"
+                       : "Apply to \(unratedCount) earlier expenses without a rate") {
+                    applyToUnrated(rate)
+                }
+                .font(.caption)
+                .buttonStyle(.borderless)
+            }
+        }
+        .onAppear {
+            text = ExchangeRates(main: main, json: ratesJSON).rate(for: code).map { "\($0)" } ?? ""
+        }
+        .onChange(of: text) { _, _ in
+            // Saved as typed; clearing the field removes the rate.
+            if rate != nil || text.isEmpty {
+                ratesJSON = ExchangeRates.setting(rate, for: code, main: main, in: ratesJSON)
+            }
+        }
     }
 }
 

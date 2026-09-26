@@ -126,6 +126,14 @@ public final class Transaction {
     public var amount: Decimal = Decimal(0)
     /// ISO 4217. Each expense keeps its own; see Currency.
     public var currencyCode: String = Currency.fallback
+
+    /// For an expense in another currency: the rate it was logged at, as units
+    /// of `currencyCode` per one unit of `rateBase` — 22.70 for 1 AED = 22.70
+    /// INR. Fixed when the expense is saved, so changing the rate in Settings
+    /// later doesn't move past totals. nil when not set.
+    public var exchangeRate: Decimal?
+    /// The main currency the rate is against, as it was when logged.
+    public var rateBase: String?
     public var date: Date = Date.now
     public var merchant: String = ""
     public var note: String = ""
@@ -169,5 +177,14 @@ public final class Transaction {
         self.subcategory = subcategory?.category === category ? subcategory : nil
         self.account = account
         self.createdAt = .now
+    }
+
+    /// This expense's value in `main`: the amount itself when it's already in
+    /// `main`, otherwise converted at its own stored rate. nil when it can't
+    /// be counted — no rate, or a rate against a different main currency.
+    public func amount(in main: String) -> Decimal? {
+        if currencyCode == main { return amount }
+        guard rateBase == main, let exchangeRate, exchangeRate > 0 else { return nil }
+        return amount / exchangeRate
     }
 }

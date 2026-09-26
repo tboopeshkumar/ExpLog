@@ -7,7 +7,15 @@ import Observation
 @Observable
 public final class TransactionDraft {
     public var amount: Decimal = 0
-    public var currencyCode: String = Currency.main
+    public var currencyCode: String = Currency.main {
+        // Another currency: start from the rate set in Settings.
+        didSet { if currencyCode != oldValue { applyCurrentRate() } }
+    }
+    /// Units of `currencyCode` per one unit of `rateBase`; see Transaction.
+    /// Taken from Settings when the currency is chosen, editable per expense,
+    /// and fixed on the expense when saved.
+    public var exchangeRate: Decimal?
+    public var rateBase: String?
     public var date: Date = .now
     public var merchant: String = ""
     public var note: String = ""
@@ -37,6 +45,8 @@ public final class TransactionDraft {
         existing = transaction
         amount = transaction.amount
         currencyCode = transaction.currencyCode
+        exchangeRate = transaction.exchangeRate
+        rateBase = transaction.rateBase
         date = transaction.date
         merchant = transaction.merchant
         note = transaction.note
@@ -52,6 +62,7 @@ public final class TransactionDraft {
     public init(parsed: ParsedTransaction, context: ModelContext, receivedAt: Date = .now) {
         amount = parsed.amount ?? 0
         currencyCode = parsed.currency ?? Currency.main
+        applyCurrentRate()
         date = parsed.date ?? receivedAt
         reference = parsed.reference
         rawMessage = parsed.raw
@@ -67,6 +78,18 @@ public final class TransactionDraft {
         }
         parsedCard = parsed.card
         account = AccountMatching.account(for: parsed.raw, in: context)
+    }
+
+    /// The rate from Settings for the current currency, against today's main
+    /// currency; none when the expense is in the main currency.
+    public func applyCurrentRate() {
+        if currencyCode == Currency.main {
+            exchangeRate = nil
+            rateBase = nil
+        } else {
+            exchangeRate = Currency.exchangeRates.rate(for: currencyCode)
+            rateBase = Currency.main
+        }
     }
 
     public var isValid: Bool {
@@ -119,6 +142,13 @@ public final class TransactionDraft {
 
         transaction.amount = amount
         transaction.currencyCode = currencyCode
+        if currencyCode == Currency.main || exchangeRate == nil {
+            transaction.exchangeRate = nil
+            transaction.rateBase = nil
+        } else {
+            transaction.exchangeRate = exchangeRate
+            transaction.rateBase = rateBase ?? Currency.main
+        }
         transaction.date = date
         transaction.merchant = merchant.trimmingCharacters(in: .whitespaces)
         transaction.note = note

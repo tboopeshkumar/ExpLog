@@ -18,17 +18,18 @@ public struct MonthSummary {
     }
 
     public let month: Date
-    /// Spending in the main currency. Other currencies are never added in.
+    /// Spending in the main currency, other currencies converted at the rate
+    /// each was logged with.
     public let total: Decimal
     /// Every expense in the month, whatever its currency.
     public let count: Int
     /// The main currency: what `total` and `rows` are in.
     public let currencyCode: String
-    /// Largest first; uncategorised spending is its own row. Main currency
-    /// only, so the shares compare like with like.
+    /// Largest first; uncategorised spending is its own row. In the main
+    /// currency, so the shares compare like with like.
     public let rows: [Row]
-    /// Spending in other currencies, per currency — shown beside the total,
-    /// not in it.
+    /// Spending that couldn't be converted (logged without a rate), per
+    /// currency — shown beside the total, not in it.
     public let otherCurrencies: [Currency.Total]
 
     public init(
@@ -39,19 +40,20 @@ public struct MonthSummary {
     ) {
         let range = Formatting.monthRange(containing: month, calendar: calendar)
         let inMonth = transactions.filter { range.contains($0.date) }
-        let inMain = inMonth.filter { $0.currencyCode == mainCurrency }
+        let converted = inMonth.compactMap { t in t.amount(in: mainCurrency).map { (t, $0) } }
 
         self.month = range.lowerBound
-        self.total = inMain.reduce(Decimal(0)) { $0 + $1.amount }
+        self.total = converted.reduce(Decimal(0)) { $0 + $1.1 }
         self.count = inMonth.count
         self.currencyCode = mainCurrency
-        self.otherCurrencies = Currency.totals(of: inMonth.filter { $0.currencyCode != mainCurrency }, main: mainCurrency)
+        self.otherCurrencies = Currency.mainTotal(of: inMonth, main: mainCurrency).unconverted
 
-        let grouped = Dictionary(grouping: inMain) { $0.category?.persistentModelID }
+        let grouped = Dictionary(grouping: converted) { $0.0.category?.persistentModelID }
         let total = self.total
         self.rows = grouped.values
-            .map { items in
-                let amount = items.reduce(Decimal(0)) { $0 + $1.amount }
+            .map { pairs in
+                let items = pairs.map(\.0)
+                let amount = pairs.reduce(Decimal(0)) { $0 + $1.1 }
                 let share = total > 0
                     ? NSDecimalNumber(decimal: amount / total).doubleValue
                     : 0
@@ -87,15 +89,17 @@ public struct SubcategoryBreakdown {
 
     public let rows: [Row]
 
-    /// `transactions` should already be one category's, for one month. Only
-    /// the main currency's are counted, so the shares compare like with like.
+    /// `transactions` should already be one category's, for one month. In the
+    /// main currency, others at the rate each was logged with; ones without a
+    /// rate are left out.
     public init(transactions: [Transaction], mainCurrency: String = Currency.main) {
-        let transactions = transactions.filter { $0.currencyCode == mainCurrency }
-        let total = transactions.reduce(Decimal(0)) { $0 + $1.amount }
-        rows = Dictionary(grouping: transactions) { $0.subcategory?.persistentModelID }
+        let converted = transactions.compactMap { t in t.amount(in: mainCurrency).map { (t, $0) } }
+        let total = converted.reduce(Decimal(0)) { $0 + $1.1 }
+        rows = Dictionary(grouping: converted) { $0.0.subcategory?.persistentModelID }
             .values
-            .map { items in
-                let amount = items.reduce(Decimal(0)) { $0 + $1.amount }
+            .map { pairs in
+                let items = pairs.map(\.0)
+                let amount = pairs.reduce(Decimal(0)) { $0 + $1.1 }
                 let share = total > 0 ? NSDecimalNumber(decimal: amount / total).doubleValue : 0
                 return Row(subcategory: items.first?.subcategory, amount: amount, count: items.count, share: share)
             }
@@ -123,7 +127,7 @@ public struct SubcategoryBreakdown {
 /// spaces, so "LULU Hypermarket" and "Lulu  hypermarket" are one row, shown
 /// under whichever spelling is most common. Different names stay apart —
 /// "Lulu" and "Lulu Center" may well be different shops, and merging on a
-/// guess would be worse than two rows. Main currency only, like the other
+/// guess would be worse than two rows. In the main currency, like the other
 /// breakdowns, so the shares compare like with like.
 public struct MerchantBreakdown {
     public struct Row: Identifiable {
@@ -141,11 +145,12 @@ public struct MerchantBreakdown {
     public let rows: [Row]
 
     public init(transactions: [Transaction], mainCurrency: String = Currency.main) {
-        let inMain = transactions.filter { $0.currencyCode == mainCurrency }
-        let total = inMain.reduce(Decimal(0)) { $0 + $1.amount }
-        rows = Dictionary(grouping: inMain) { Self.key(for: $0.merchant) }
-            .map { key, items in
-                let amount = items.reduce(Decimal(0)) { $0 + $1.amount }
+        let converted = transactions.compactMap { t in t.amount(in: mainCurrency).map { (t, $0) } }
+        let total = converted.reduce(Decimal(0)) { $0 + $1.1 }
+        rows = Dictionary(grouping: converted) { Self.key(for: $0.0.merchant) }
+            .map { key, pairs in
+                let items = pairs.map(\.0)
+                let amount = pairs.reduce(Decimal(0)) { $0 + $1.1 }
                 return Row(
                     key: key,
                     name: Self.mostCommon(items.map { Self.tidy($0.merchant) }) ?? "Unnamed",

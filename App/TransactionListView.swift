@@ -113,7 +113,7 @@ struct TransactionListView: View {
     }
 
     private func total(of items: [Transaction]) -> Text {
-        Formatting.totalsText(Currency.totals(of: items, main: mainCurrency))
+        Formatting.mainTotalText(of: items, main: mainCurrency)
     }
 
     private func delete(_ offsets: IndexSet, in items: [Transaction]) {
@@ -126,6 +126,15 @@ struct TransactionListView: View {
 
 struct TransactionRow: View {
     let transaction: Transaction
+
+    @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
+
+    /// For an expense in another currency: what it counts as in the totals,
+    /// at the rate it was logged with.
+    private var converted: Decimal? {
+        guard transaction.currencyCode != mainCurrency else { return nil }
+        return transaction.amount(in: mainCurrency)
+    }
 
     /// "Sep 26 · Uncategorised · SIB Cashback"
     private var details: String {
@@ -161,9 +170,17 @@ struct TransactionRow: View {
             // it with the text, cutting the details short beside empty space.
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Formatting.moneyText(transaction.amount, code: transaction.currencyCode)
-                .monospacedDigit()
-                .layoutPriority(1)
+            VStack(alignment: .trailing, spacing: 2) {
+                Formatting.moneyText(transaction.amount, code: transaction.currencyCode)
+                    .monospacedDigit()
+                if let converted {
+                    (Text("≈ ") + Formatting.moneyText(converted, code: mainCurrency))
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .layoutPriority(1)
         }
         .padding(.vertical, 2)
     }
@@ -197,7 +214,7 @@ private struct UpcomingRow: View {
                 }
             }
             Spacer()
-            Formatting.totalsText(Currency.totals(of: items, main: mainCurrency))
+            Formatting.mainTotalText(of: items, main: mainCurrency)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
             Image(systemName: "chevron.right")

@@ -23,12 +23,21 @@ extension Formatting {
     }
 
     /// Per-currency totals on one line, main currency first:
-    /// "Ð 1,465.12 + ₹2,500.00". Never one number across currencies.
+    /// "Ð 1,465.12 + ₹2,500.00". Each stays in its own currency.
     public static func totalsText(_ totals: [Currency.Total]) -> Text {
         guard let first = totals.first else { return moneyText(0, code: Currency.main) }
         return totals.dropFirst().reduce(moneyText(first.amount, code: first.code)) { line, next in
             line + Text(" + ") + moneyText(next.amount, code: next.code)
         }
+    }
+
+    /// A total in the main currency, others converted at the rate each was
+    /// logged with: "Ð 1,575.25". An expense without a rate can't be counted,
+    /// so it's shown after: "Ð 1,465.12 + ₹2,500.00".
+    public static func mainTotalText(of transactions: [Transaction], main: String) -> Text {
+        let result = Currency.mainTotal(of: transactions, main: main)
+        let total = Currency.Total(code: main, amount: result.total, count: 0)
+        return totalsText([total] + result.unconverted)
     }
 
     /// The currency marker on its own, for a field's leading label: the

@@ -557,6 +557,106 @@ func run() throws {
     ], mainCurrency: "AED")
     expect(spellings.rows.first?.name == "Lulu", "the most common spelling wins")
 
+    print("\nEXCHANGE RATES\n")
+
+    // Storage: per pair, inverse understood, other mains ignored.
+    var ratesJSON = ExchangeRates.setting(Decimal(string: "22.70")!, for: "INR", main: "AED", in: "")
+    ratesJSON = ExchangeRates.setting(Decimal(string: "0.25")!, for: "EUR", main: "AED", in: ratesJSON)
+    let fromAED = ExchangeRates(main: "AED", json: ratesJSON)
+    expect(fromAED.rate(for: "INR") == Decimal(string: "22.70") && fromAED.rate(for: "AED") == 1, "rates read back per pair")
+    expect(ExchangeRates(main: "INR", json: ratesJSON).rate(for: "AED") == 1 / Decimal(string: "22.70")!,
+           "an inverse pair is understood")
+    expect(ExchangeRates(main: "USD", json: ratesJSON).rate(for: "INR") == nil,
+           "rates for another main currency aren't reused")
+    expect(ExchangeRates(main: "AED", json: ExchangeRates.setting(nil, for: "INR", main: "AED", in: ratesJSON)).rate(for: "INR") == nil,
+           "clearing a rate removes it")
+
+    // Each expense counts at its own rate, against its own base.
+    let rated = Transaction(amount: 2270, currencyCode: "INR", merchant: "rated")
+    rated.exchangeRate = Decimal(string: "22.70")
+    rated.rateBase = "AED"
+    expect(rated.amount(in: "AED") == 100, "an expense converts at its stored rate")
+    expect(rated.amount(in: "USD") == nil, "…only against the main currency it was logged with")
+    expect(Transaction(amount: 500, currencyCode: "INR", merchant: "unrated").amount(in: "AED") == nil,
+           "no stored rate: not counted, never guessed")
+
+    // Logging captures today's rate; changing the rate later changes nothing.
+    Currency.defaults.set(ratesJSON, forKey: Currency.exchangeRatesKey)
+    let abroad = TransactionDraft()
+    abroad.amount = 454
+    abroad.merchant = "Chai stall"
+    abroad.currencyCode = "INR"
+    expect(abroad.exchangeRate == Decimal(string: "22.70") && abroad.rateBase == "AED",
+           "choosing a currency starts from the rate in Settings")
+    let loggedAbroad = try abroad.save(in: fresh)
+    Currency.defaults.set(ExchangeRates.setting(Decimal(30), for: "INR", main: "AED", in: ratesJSON), forKey: Currency.exchangeRatesKey)
+    expect(loggedAbroad.amount(in: "AED") == 20, "changing the rate later leaves a logged expense alone",
+           "\(loggedAbroad.amount(in: "AED").map { "\($0)" } ?? "nil")")
+    let reopened = TransactionDraft(editing: loggedAbroad)
+    expect(reopened.exchangeRate == Decimal(string: "22.70"), "editing an expense keeps the rate it was logged with")
+    let newAbroad = TransactionDraft()
+    newAbroad.currencyCode = "INR"
+    expect(newAbroad.exchangeRate == 30, "a new expense takes the updated rate")
+    newAbroad.currencyCode = "AED"
+    expect(newAbroad.exchangeRate == nil, "back in the main currency: no rate")
+    Currency.defaults.set(ratesJSON, forKey: Currency.exchangeRatesKey)
+
+    // Totals: one main-currency number when every expense has a rate.
+    let spentAbroad: [Transaction] = [
+        Transaction(amount: 100, currencyCode: "AED", date: .now, merchant: "home", category: transport),
+        rated,
+    ]
+    rated.date = .now
+    rated.category = freshDining
+    let converted = MonthSummary(month: .now, transactions: spentAbroad, mainCurrency: "AED")
+    expect(converted.total == 200 && converted.otherCurrencies.isEmpty, "rated spending joins the main total", "\(converted.total)")
+    expect(converted.rows.map(\.amount).sorted() == [100, 100], "categories count it converted too")
+    let withUnrated = MonthSummary(month: .now,
+        transactions: spentAbroad + [Transaction(amount: 500, currencyCode: "INR", date: .now, merchant: "old")],
+        mainCurrency: "AED")
+    expect(withUnrated.total == 200 && withUnrated.otherCurrencies.first?.amount == 500,
+           "an expense without a rate is shown beside the total, not in it")
+    expect(MerchantBreakdown(transactions: spentAbroad, mainCurrency: "AED").rows.reduce(Decimal(0)) { $0 + $1.amount } == 200,
+           "merchant breakdown converts")
+
+    // Giving older expenses a rate: only the ones without one.
+    let older = [
+        Transaction(amount: 100, currencyCode: "INR", merchant: "older 1"),
+        Transaction(amount: 200, currencyCode: "INR", merchant: "older 2"),
+        rated,
+    ]
+    expect(Currency.unrated("INR", in: older).count == 2, "counts only expenses without a rate")
+    let applied = Currency.applyRate(25, toUnrated: "INR", main: "AED", in: older)
+    expect(applied == 2 && older[0].exchangeRate == 25 && rated.exchangeRate == Decimal(string: "22.70"),
+           "fills in unrated ones and never touches a rated one")
+
+    // CSV keeps each expense's rate; imported history doesn't get today's rate.
+    let ratedExport = try String(contentsOf: try CSV.write([loggedAbroad]), encoding: .utf8)
+    expect(ratedExport.contains(",22.7,AED"), "export writes the expense's own rate", ratedExport)
+    let restoreURL = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: "rates-\(UUID()).store")
+    defer { try? FileManager.default.removeItem(at: restoreURL) }
+    let restore = ModelContext(try ModelContainer(for: SharedStoreSchema.schema,
+        configurations: [ModelConfiguration(schema: SharedStoreSchema.schema, url: restoreURL)]))
+    _ = try CSV.importRows(from: ratedExport, into: restore)
+    let restoredRated = try restore.fetch(FetchDescriptor<Transaction>()).first
+    expect(restoredRated?.exchangeRate == Decimal(string: "22.7") && restoredRated?.rateBase == "AED",
+           "a restore brings the rate back")
+    _ = try CSV.importRows(from: """
+    Date,Amount,Currency,Merchant,Category,Account,Note,Reference
+    2025-01-05T10:00:00,300.00,INR,Old trip,,,,
+    """, into: restore)
+    expect(try restore.fetch(FetchDescriptor<Transaction>()).first { $0.merchant == "Old trip" }?.exchangeRate == nil,
+           "imported history isn't given today's rate")
+
+    // The share-sheet handoff carries a rate typed in the share form.
+    let shared = TransactionDraft()
+    shared.amount = 90
+    shared.merchant = "Shared"
+    shared.currencyCode = "INR"
+    shared.exchangeRate = 18
+    let received = TransactionLink.draft(from: TransactionLink.url(for: shared)!, context: fresh)
+    expect(received?.exchangeRate == 18 && received?.rateBase == "AED", "a rate set in the share form survives the handoff")
+
     do {
         _ = try CSV.importRows(from: "Name,Value\nx,1\n", into: fresh)
         expect(false, "a non-ExpLog CSV is refused")

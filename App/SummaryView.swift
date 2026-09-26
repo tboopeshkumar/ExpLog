@@ -121,9 +121,11 @@ struct SummaryView: View {
                 .lineLimit(1)
             Text(summary.count == 1 ? "1 expense" : "\(summary.count) expenses")
                 .foregroundStyle(.secondary)
-            // Spending in other currencies: beside the total, never in it.
+            // Only expenses logged without a rate: they can't be counted in
+            // the total, so they're shown beside it.
             if !summary.otherCurrencies.isEmpty {
-                (Text("Plus ") + Formatting.totalsText(summary.otherCurrencies))
+                (Text("Plus ") + Formatting.totalsText(summary.otherCurrencies)
+                    + Text(" with no exchange rate"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -230,6 +232,7 @@ private struct MonthExpensesView: View {
 
     @State private var editing: TransactionDraft?
     @State private var showsAllMerchants = false
+    @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
 
     /// Merchants shown before "Show all", so a long tail doesn't push the
     /// expenses off the screen.
@@ -259,8 +262,8 @@ private struct MonthExpensesView: View {
         let matching = matching
         let category: ExpenseCategory? = if case .category(let category) = scope { category } else { nil }
         let isCategory = if case .category = scope { true } else { false }
-        let subcategories = SubcategoryBreakdown(transactions: matching)
-        let merchants = MerchantBreakdown(transactions: matching)
+        let subcategories = SubcategoryBreakdown(transactions: matching, mainCurrency: mainCurrency)
+        let merchants = MerchantBreakdown(transactions: matching, mainCurrency: mainCurrency)
         let showsSubcategories = isCategory && subcategories.isWorthShowing
         // One merchant would be a row saying "100%".
         let showsMerchants = isCategory && merchants.rows.count > 1
@@ -274,7 +277,7 @@ private struct MonthExpensesView: View {
                             title: row.subcategory?.name ?? "No subcategory",
                             amount: row.amount,
                             share: row.share,
-                            currencyCode: Currency.main
+                            currencyCode: mainCurrency
                         )
                     }
                 }
@@ -291,7 +294,7 @@ private struct MonthExpensesView: View {
                                 title: row.name,
                                 amount: row.amount,
                                 share: row.share,
-                                currencyCode: Currency.main,
+                                currencyCode: mainCurrency,
                                 count: row.count
                             )
                         }
