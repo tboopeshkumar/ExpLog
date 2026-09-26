@@ -8,6 +8,7 @@ struct TransactionListView: View {
     private var transactions: [Transaction]
 
     @State private var editing: TransactionDraft?
+    @State private var categorising: Transaction?
     @State private var searchText = ""
     @State private var showsUpcoming = false
     /// Watched so totals reorder the moment the main currency changes.
@@ -74,6 +75,9 @@ struct TransactionListView: View {
                 }
             }
         }
+        .sheet(item: $categorising) { transaction in
+            QuickCategorySheet(transaction: transaction)
+        }
         .sheet(item: $editing) { draft in
             NavigationStack {
                 TransactionFormView(
@@ -97,9 +101,12 @@ struct TransactionListView: View {
                         TransactionRow(transaction: transaction)
                     }
                     .buttonStyle(.plain)
-                }
-                .onDelete { offsets in
-                    delete(offsets, in: month.items)
+                    .expenseActions(
+                        for: transaction,
+                        categorise: { categorising = $0 },
+                        copy: { editing = TransactionDraft(copying: $0) },
+                        delete: delete
+                    )
                 }
             } header: {
                 HStack {
@@ -116,10 +123,8 @@ struct TransactionListView: View {
         Formatting.mainTotalText(of: items, main: mainCurrency)
     }
 
-    private func delete(_ offsets: IndexSet, in items: [Transaction]) {
-        for index in offsets {
-            context.delete(items[index])
-        }
+    private func delete(_ transaction: Transaction) {
+        context.delete(transaction)
         try? context.save()
     }
 }

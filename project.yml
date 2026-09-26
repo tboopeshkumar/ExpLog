@@ -30,6 +30,9 @@ targets:
   ExpLog:
     type: application
     platform: iOS
+    scheme:
+      testTargets:
+        - ExpLogUITests
     sources:
       - path: App
       - path: Shared
@@ -104,3 +107,18 @@ targets:
         # Uncomment together with the app's, after enrolling.
         # com.apple.security.application-groups:
         #   - group.$(EXPLOG_BUNDLE_ID_PREFIX).explog
+
+  # Drives the app in the simulator: swipe actions, sheets — what the logic
+  # tests in Tools/ can't reach.
+  ExpLogUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: ExpLog
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(EXPLOG_BUNDLE_ID_PREFIX).explog.uitests
+        TEST_TARGET_NAME: ExpLog
+        GENERATE_INFOPLIST_FILE: YES

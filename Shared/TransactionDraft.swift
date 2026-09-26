@@ -57,6 +57,22 @@ public final class TransactionDraft {
         account = transaction.account
     }
 
+    /// A new expense copied from `original`, dated `date` — for repeats, like
+    /// the same lunch or fare again. Not copied: the bank reference and the
+    /// SMS, which belong to the original purchase. A foreign-currency copy
+    /// takes today's rate, since it's logged today.
+    public init(copying original: Transaction, on date: Date = .now) {
+        amount = original.amount
+        currencyCode = original.currencyCode
+        self.date = date
+        merchant = original.merchant
+        note = original.note
+        category = original.category
+        subcategory = original.subcategory
+        account = original.account
+        applyCurrentRate()
+    }
+
     /// Builds a draft from a parsed SMS, filling in the account and category the
     /// message itself cannot supply by looking at what was saved before.
     public init(parsed: ParsedTransaction, context: ModelContext, receivedAt: Date = .now) {
@@ -78,6 +94,21 @@ public final class TransactionDraft {
         }
         parsedCard = parsed.card
         account = AccountMatching.account(for: parsed.raw, in: context)
+    }
+
+    /// Sets an expense's category (and optional subcategory) in one step, via
+    /// the same save as the editor — so the subcategory rule holds and, for an
+    /// expense from an SMS, the merchant's category is learned for next time.
+    public static func categorise(
+        _ transaction: Transaction,
+        as category: ExpenseCategory?,
+        subcategory: ExpenseSubcategory? = nil,
+        in context: ModelContext
+    ) throws {
+        let draft = TransactionDraft(editing: transaction)
+        draft.category = category
+        draft.subcategory = subcategory?.category === category ? subcategory : nil
+        try draft.save(in: context)
     }
 
     /// The rate from Settings for the current currency, against today's main

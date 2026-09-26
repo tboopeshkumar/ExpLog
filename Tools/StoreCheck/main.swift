@@ -657,6 +657,49 @@ func run() throws {
     let received = TransactionLink.draft(from: TransactionLink.url(for: shared)!, context: fresh)
     expect(received?.exchangeRate == 18 && received?.rateBase == "AED", "a rate set in the share form survives the handoff")
 
+    print("\nQUICK CATEGORISE AND COPY\n")
+
+    // Quick categorise: same rules and learning as the editor.
+    let fareSMS = "Thank you for using Card ending 9911 at SPEEDY CABS LLC for AED 14.00. Avl. limit is AED XXX.10."
+    let fareDraft = TransactionDraft(parsed: SMSParser.parse(fareSMS)!, context: fresh)
+    let fare = try fareDraft.save(in: fresh)
+    expect(fare.category == nil, "arrives uncategorised")
+    try TransactionDraft.categorise(fare, as: transport, subcategory: taxi, in: fresh)
+    expect(fare.category === transport && fare.subcategory === taxi, "one step sets category and subcategory")
+    let nextFare = TransactionDraft(parsed: SMSParser.parse(fareSMS.replacingOccurrences(of: "14.00", with: "16.00"))!, context: fresh)
+    expect(nextFare.category === transport && nextFare.subcategory === taxi,
+           "…and the merchant is learned, so the next SMS arrives categorised")
+    try TransactionDraft.categorise(fare, as: freshDining, subcategory: taxi, in: fresh)
+    expect(fare.category === freshDining && fare.subcategory == nil, "a subcategory from another category is dropped")
+
+    // Copy with today's date.
+    let lunchCard = Account(name: "Lunch card")
+    fresh.insert(lunchCard)
+    let lunch = Transaction(amount: 32.5, currencyCode: "AED", date: day(9, 1), merchant: "Canteen",
+                            note: "team lunch", reference: "R123", rawMessage: "an SMS",
+                            category: transport, subcategory: taxi, account: lunchCard)
+    fresh.insert(lunch)
+    try fresh.save()
+    let now = Date.now
+    let copy = TransactionDraft(copying: lunch, on: now)
+    expect(copy.amount == 32.5 && copy.merchant == "Canteen" && copy.note == "team lunch",
+           "amount, merchant and note are copied")
+    expect(copy.category === transport && copy.subcategory === taxi && copy.account === lunchCard,
+           "category, subcategory and account are copied")
+    expect(copy.date == now, "the copy is dated now")
+    expect(copy.reference == nil && copy.rawMessage == nil, "the bank reference and SMS stay with the original")
+    let copied = try copy.save(in: fresh)
+    expect(copied !== lunch && lunch.date == day(9, 1) && lunch.reference == "R123", "the original is untouched")
+
+    let abroadLunch = Transaction(amount: 454, currencyCode: "INR", date: day(9, 2), merchant: "Chai")
+    abroadLunch.exchangeRate = 20
+    abroadLunch.rateBase = "AED"
+    Currency.defaults.set(ExchangeRates.setting(Decimal(string: "22.70")!, for: "INR", main: "AED", in: ""),
+                          forKey: Currency.exchangeRatesKey)
+    let abroadCopy = TransactionDraft(copying: abroadLunch)
+    expect(abroadCopy.exchangeRate == Decimal(string: "22.70") && abroadCopy.rateBase == "AED",
+           "a foreign copy takes today's rate, not the original's")
+
     do {
         _ = try CSV.importRows(from: "Name,Value\nx,1\n", into: fresh)
         expect(false, "a non-ExpLog CSV is refused")

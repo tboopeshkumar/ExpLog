@@ -89,6 +89,13 @@ before touching the parser.**
 ./Tools/check-store.sh
 ```
 
+UI behaviour — swipes, sheets — is covered by a UI test run in the simulator
+(`UITests/QuickActionsUITests.swift`; see its header for the data it expects):
+
+```bash
+xcodebuild test -project ExpLog.xcodeproj -scheme ExpLog -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+```
+
 The data layer against a real SwiftData store: card matching, category
 learning, duplicate detection, totals — the same path the share extension runs
 when you tap Save.
@@ -276,6 +283,15 @@ unless every month's total matches the source. `check-convert.py` tests it on
 a synthetic export.
 AirDrop the CSV to the phone and import it. Keep both files out of this
 repository: they're real spending.
+
+## Quick actions
+
+Swipe an expense right for **Categorise** — a half-height sheet of categories
+with their subcategories beneath, one tap to assign — and **Copy**, which opens
+the form pre-filled with a copy dated now (not the bank reference or the SMS,
+and at today's exchange rate). Swipe left to delete. The same three are in the
+long-press menu, in the expense list and the Summary drill-downs. Categorising
+this way saves through the editor's path, so a merchant from an SMS is learned.
 
 ## Monthly summary
 

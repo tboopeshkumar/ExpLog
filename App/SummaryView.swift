@@ -231,7 +231,9 @@ private struct MonthExpensesView: View {
     private var transactions: [Transaction]
 
     @State private var editing: TransactionDraft?
+    @State private var categorising: Transaction?
     @State private var showsAllMerchants = false
+    @Environment(\.modelContext) private var context
     @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
 
     /// Merchants shown before "Show all", so a long tail doesn't push the
@@ -314,6 +316,12 @@ private struct MonthExpensesView: View {
                         TransactionRow(transaction: transaction)
                     }
                     .buttonStyle(.plain)
+                    .expenseActions(
+                        for: transaction,
+                        categorise: { categorising = $0 },
+                        copy: { editing = TransactionDraft(copying: $0) },
+                        delete: { context.delete($0); try? context.save() }
+                    )
                 }
             }
         }
@@ -324,6 +332,9 @@ private struct MonthExpensesView: View {
             if matching.isEmpty {
                 ContentUnavailableView("No expenses", systemImage: "tray")
             }
+        }
+        .sheet(item: $categorising) { transaction in
+            QuickCategorySheet(transaction: transaction)
         }
         .sheet(item: $editing) { draft in
             NavigationStack {
