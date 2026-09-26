@@ -32,14 +32,17 @@ struct RootView: View {
     @State private var imported: [Transaction] = []
     /// Reopens on the tab you last used.
     @AppStorage("selectedTab") private var selectedTab: AppTab = .expenses
+    /// The month on screen in both Expenses and Summary. Not remembered:
+    /// the app opens on this month.
+    @State private var month = Formatting.monthStart(.now)
 
     var body: some View {
         TabView(selection: $selectedTab) {
             Tab("Expenses", systemImage: "list.bullet", value: .expenses) {
-                NavigationStack { TransactionListView() }
+                NavigationStack { TransactionListView(month: $month) }
             }
             Tab("Summary", systemImage: "chart.bar", value: .summary) {
-                NavigationStack { SummaryView() }
+                NavigationStack { SummaryView(month: $month) }
             }
             Tab("Settings", systemImage: "gearshape", value: .settings) {
                 NavigationStack { SettingsView() }

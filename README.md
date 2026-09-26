@@ -293,6 +293,24 @@ and at today's exchange rate). Swipe left to delete. The same three are in the
 long-press menu, in the expense list and the Summary drill-downs. Categorising
 this way saves through the editor's path, so a merchant from an SMS is learned.
 
+## Months
+
+The Expenses tab shows one month at a time, opening on the current one, with
+its total and the expenses grouped by day (each day with its own total). The
+‹ › arrows step a month; tapping the month's name opens a list of every month
+that has expenses, by year with their totals, to jump straight to one, and
+"This month" comes back. Future-dated expenses (instalments) sit in their own
+months, one tap forward. Search covers every month.
+
+Expenses and Summary share the chosen month, so switching tabs keeps your
+place. Only that month's expenses are fetched (plus the first and last, for
+where the arrows stop), so the list stays quick however much history there
+is. Grouping and the arrows' limits are in `Shared/MonthIndex.swift`, covered
+by `check-store.sh`; `MonthNavigationUITests` drives the switcher.
+
+There's no sideways swipe between months: rows already use sideways swipes
+for their quick actions.
+
 ## Monthly summary
 
 The Summary tab shows one month's total and its spending by category or by

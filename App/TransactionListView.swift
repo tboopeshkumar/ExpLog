@@ -1,73 +1,39 @@
 import SwiftUI
 import SwiftData
 
+/// The Expenses tab: one month at a time, grouped by day, with the month
+/// switcher on top. Searching looks across every month instead.
 struct TransactionListView: View {
+    /// Shared with Summary, so both tabs show the same month.
+    @Binding var month: Date
+
     @Environment(\.modelContext) private var context
-
-    @Query(sort: \Transaction.date, order: .reverse)
-    private var transactions: [Transaction]
-
     @State private var editing: TransactionDraft?
     @State private var categorising: Transaction?
     @State private var searchText = ""
-    @State private var showsUpcoming = false
-    /// Watched so totals reorder the moment the main currency changes.
     @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
 
-    private var filtered: [Transaction] {
-        guard !searchText.isEmpty else { return transactions }
-        let needle = searchText.lowercased()
-        return transactions.filter {
-            $0.merchant.lowercased().contains(needle)
-                || $0.note.lowercased().contains(needle)
-                || ($0.category?.name.lowercased().contains(needle) ?? false)
-        }
-    }
-
-    /// Newest month first, transactions already in reverse date order.
-    private func months(_ items: [Transaction]) -> [(start: Date, items: [Transaction])] {
-        Dictionary(grouping: items) { Formatting.monthStart($0.date) }
-            .map { (start: $0.key, items: $0.value) }
-            .sorted { $0.start > $1.start }
+    private var actions: RowActions {
+        RowActions(
+            edit: { editing = TransactionDraft(editing: $0) },
+            categorise: { categorising = $0 },
+            copy: { editing = TransactionDraft(copying: $0) },
+            delete: { context.delete($0); try? context.save() }
+        )
     }
 
     var body: some View {
-        // Future-dated expenses — instalments imported ahead of time — sit in
-        // a collapsed Upcoming group, so the list opens on this month's actual
-        // spending rather than on next year's plan. A search shows them all.
-        let now = Date.now
-        let upcoming = filtered.filter { $0.date > now }
-        let past = filtered.filter { $0.date <= now }
-        let expandUpcoming = showsUpcoming || !searchText.isEmpty
-
-        List {
-            if !upcoming.isEmpty {
-                Section {
-                    Button {
-                        withAnimation { showsUpcoming.toggle() }
-                    } label: {
-                        UpcomingRow(items: upcoming, expanded: expandUpcoming, mainCurrency: mainCurrency)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!searchText.isEmpty)
-                }
-                if expandUpcoming {
-                    monthSections(months(upcoming))
-                }
+        Group {
+            if searchText.isEmpty {
+                MonthLedger(month: $month, mainCurrency: mainCurrency, actions: actions)
+                    // A fresh view per month: its own query, scrolled to the top.
+                    .id(month)
+            } else {
+                SearchResults(searchText: searchText, mainCurrency: mainCurrency, actions: actions)
             }
-            monthSections(months(past))
         }
         .navigationTitle("Expenses")
-        .searchable(text: $searchText, prompt: "Merchant, note or category")
-        .overlay {
-            if transactions.isEmpty {
-                ContentUnavailableView {
-                    Label("Nothing logged yet", systemImage: "tray")
-                } description: {
-                    Text("Share a bank SMS from Messages, or add one by hand.")
-                }
-            }
-        }
+        .searchable(text: $searchText, prompt: "Search all months")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Add", systemImage: "plus") {
@@ -90,42 +56,156 @@ struct TransactionListView: View {
             }
         }
     }
+}
 
-    private func monthSections(_ months: [(start: Date, items: [Transaction])]) -> some View {
-        ForEach(months, id: \.start) { month in
+/// What a row can do, passed down so month and search views share it.
+struct RowActions {
+    let edit: (Transaction) -> Void
+    let categorise: (Transaction) -> Void
+    let copy: (Transaction) -> Void
+    let delete: (Transaction) -> Void
+}
+
+/// A tappable expense row with its swipe and long-press actions.
+private struct ExpenseRowButton: View {
+    let transaction: Transaction
+    let actions: RowActions
+
+    var body: some View {
+        Button {
+            actions.edit(transaction)
+        } label: {
+            TransactionRow(transaction: transaction)
+        }
+        .buttonStyle(.plain)
+        .expenseActions(
+            for: transaction,
+            categorise: actions.categorise,
+            copy: actions.copy,
+            delete: actions.delete
+        )
+    }
+}
+
+/// One month's expenses. Fetches only that month — not every expense ever —
+/// so it stays quick however many years are logged.
+private struct MonthLedger: View {
+    @Binding var month: Date
+    let mainCurrency: String
+    let actions: RowActions
+
+    @Query private var items: [Transaction]
+    @Query(MonthSwitcher.earliestDescriptor) private var anyExpense: [Transaction]
+
+    init(month: Binding<Date>, mainCurrency: String, actions: RowActions) {
+        _month = month
+        self.mainCurrency = mainCurrency
+        self.actions = actions
+        let range = Formatting.monthRange(containing: month.wrappedValue)
+        let start = range.lowerBound, end = range.upperBound
+        _items = Query(
+            filter: #Predicate<Transaction> { $0.date >= start && $0.date < end },
+            sort: \Transaction.date,
+            order: .reverse
+        )
+    }
+
+    var body: some View {
+        List {
             Section {
-                ForEach(month.items) { transaction in
-                    Button {
-                        editing = TransactionDraft(editing: transaction)
-                    } label: {
-                        TransactionRow(transaction: transaction)
+                MonthSwitcher(month: $month)
+                if !items.isEmpty {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(items.count == 1 ? "1 expense" : "\(items.count) expenses")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Formatting.mainTotalText(of: items, main: mainCurrency)
+                            .font(.headline)
+                            .monospacedDigit()
                     }
-                    .buttonStyle(.plain)
-                    .expenseActions(
-                        for: transaction,
-                        categorise: { categorising = $0 },
-                        copy: { editing = TransactionDraft(copying: $0) },
-                        delete: delete
-                    )
                 }
-            } header: {
-                HStack {
-                    Text(Formatting.monthTitle(month.start))
-                    Spacer()
-                    total(of: month.items)
-                        .monospacedDigit()
+            }
+
+            if items.isEmpty {
+                Section {
+                    if anyExpense.isEmpty {
+                        ContentUnavailableView {
+                            Label("Nothing logged yet", systemImage: "tray")
+                        } description: {
+                            Text("Share a bank SMS from Messages, or add one by hand.")
+                        }
+                    } else {
+                        ContentUnavailableView(
+                            "No expenses",
+                            systemImage: "tray",
+                            description: Text("Nothing logged in \(Formatting.monthTitle(month)).")
+                        )
+                    }
+                }
+            }
+
+            ForEach(MonthIndex.days(of: items), id: \.day) { day in
+                Section {
+                    ForEach(day.items) { transaction in
+                        ExpenseRowButton(transaction: transaction, actions: actions)
+                    }
+                } header: {
+                    HStack {
+                        Text(day.day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
+                        Spacer()
+                        Formatting.mainTotalText(of: day.items, main: mainCurrency)
+                            .monospacedDigit()
+                    }
                 }
             }
         }
     }
+}
 
-    private func total(of items: [Transaction]) -> Text {
-        Formatting.mainTotalText(of: items, main: mainCurrency)
+/// Search results from every month, grouped by month, newest first.
+private struct SearchResults: View {
+    let searchText: String
+    let mainCurrency: String
+    let actions: RowActions
+
+    @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
+
+    private var matches: [Transaction] {
+        let needle = searchText.lowercased()
+        return transactions.filter {
+            $0.merchant.lowercased().contains(needle)
+                || $0.note.lowercased().contains(needle)
+                || ($0.category?.name.lowercased().contains(needle) ?? false)
+                || ($0.subcategory?.name.lowercased().contains(needle) ?? false)
+        }
     }
 
-    private func delete(_ transaction: Transaction) {
-        context.delete(transaction)
-        try? context.save()
+    var body: some View {
+        let matches = matches
+        let months = Dictionary(grouping: matches) { Formatting.monthStart($0.date) }
+            .map { (start: $0.key, items: $0.value) }
+            .sorted { $0.start > $1.start }
+        List {
+            ForEach(months, id: \.start) { month in
+                Section {
+                    ForEach(month.items) { transaction in
+                        ExpenseRowButton(transaction: transaction, actions: actions)
+                    }
+                } header: {
+                    HStack {
+                        Text(Formatting.monthTitle(month.start))
+                        Spacer()
+                        Formatting.mainTotalText(of: month.items, main: mainCurrency)
+                            .monospacedDigit()
+                    }
+                }
+            }
+        }
+        .overlay {
+            if matches.isEmpty {
+                ContentUnavailableView.search(text: searchText)
+            }
+        }
     }
 }
 
@@ -193,42 +273,4 @@ struct TransactionRow: View {
 
 extension TransactionDraft: Identifiable {
     public var id: ObjectIdentifier { ObjectIdentifier(self) }
-}
-
-/// The collapsed stand-in for future-dated expenses: how many, how much, and
-/// how far ahead.
-private struct UpcomingRow: View {
-    let items: [Transaction]
-    let expanded: Bool
-    let mainCurrency: String
-
-    var body: some View {
-        let dates = items.map(\.date)
-        HStack(spacing: 12) {
-            Image(systemName: "calendar.badge.clock")
-                .font(.system(size: 16))
-                .foregroundStyle(.secondary)
-                .frame(width: 32, height: 32)
-                .background(.quaternary, in: .rect(cornerRadius: 9))
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Upcoming · \(items.count)")
-                if let last = dates.max() {
-                    Text("Until \(last.formatted(.dateTime.month(.abbreviated).year()))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-            Formatting.mainTotalText(of: items, main: mainCurrency)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .rotationEffect(.degrees(expanded ? 90 : 0))
-        }
-        .contentShape(.rect)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint(expanded ? "Hides future expenses" : "Shows future expenses")
-    }
 }

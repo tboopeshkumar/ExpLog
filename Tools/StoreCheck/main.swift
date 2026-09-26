@@ -700,6 +700,48 @@ func run() throws {
     expect(abroadCopy.exchangeRate == Decimal(string: "22.70") && abroadCopy.rateBase == "AED",
            "a foreign copy takes today's rate, not the original's")
 
+    print("\nMONTH NAVIGATION\n")
+
+    let ledger: [Transaction] = [
+        Transaction(amount: 10, currencyCode: "AED", date: day(7, 3), merchant: "a"),
+        Transaction(amount: 20, currencyCode: "AED", date: day(9, 1), merchant: "b"),
+        Transaction(amount: 30, currencyCode: "AED", date: day(9, 1).addingTimeInterval(3600), merchant: "c"),
+        Transaction(amount: 5, currencyCode: "AED", date: day(9, 14), merchant: "d"),
+        Transaction(amount: 450, currencyCode: "INR", date: day(9, 14), merchant: "e"),
+    ]
+    let monthList = MonthIndex.months(of: ledger, mainCurrency: "AED", calendar: calendar)
+    expect(monthList.map(\.start) == [day(9, 1), day(7, 1)].map { Formatting.monthStart($0, calendar: calendar) },
+           "months with expenses, newest first; empty August isn't listed")
+    expect(monthList.first?.count == 4 && monthList.first?.total == 55, "a month's count and main-currency total",
+           "\(monthList.first.map { "\($0.count) \($0.total)" } ?? "")")
+    expect(monthList.first?.unconverted.first?.code == "INR", "an unrated currency is carried separately")
+
+    let navNow = day(9, 20)
+    let range = MonthIndex.bounds(earliest: day(7, 3), latest: day(9, 14), now: navNow, calendar: calendar)
+    expect(range.lowerBound == Formatting.monthStart(day(7, 3), calendar: calendar)
+               && range.upperBound == Formatting.monthStart(navNow, calendar: calendar),
+           "arrows reach back to the first month with expenses, forward to this month")
+    let withFuture = MonthIndex.bounds(earliest: day(7, 3), latest: calendar.date(byAdding: .month, value: 4, to: navNow), now: navNow, calendar: calendar)
+    expect(withFuture.upperBound == Formatting.monthStart(calendar.date(byAdding: .month, value: 4, to: navNow)!, calendar: calendar),
+           "…or further, to the latest future instalment")
+    expect(MonthIndex.bounds(earliest: nil, latest: nil, now: navNow, calendar: calendar)
+               == Formatting.monthStart(navNow, calendar: calendar)...Formatting.monthStart(navNow, calendar: calendar),
+           "no expenses: just this month")
+
+    let navSeptember = Formatting.monthStart(day(9, 1), calendar: calendar)
+    expect(MonthIndex.step(navSeptember, by: -1, within: range, calendar: calendar) == Formatting.monthStart(day(8, 1), calendar: calendar),
+           "stepping back a month")
+    expect(MonthIndex.step(navSeptember, by: 1, within: range, calendar: calendar) == navSeptember,
+           "can't step past the last month")
+    expect(MonthIndex.step(Formatting.monthStart(day(7, 1), calendar: calendar), by: -1, within: range, calendar: calendar)
+               == Formatting.monthStart(day(7, 1), calendar: calendar),
+           "…or before the first")
+
+    let septemberDays = MonthIndex.days(of: Array(ledger.dropFirst()), calendar: calendar)
+    expect(septemberDays.map(\.day) == [calendar.startOfDay(for: day(9, 14)), calendar.startOfDay(for: day(9, 1))],
+           "grouped by day, newest day first")
+    expect(septemberDays.last?.items.map(\.merchant) == ["c", "b"], "newest first within a day")
+
     do {
         _ = try CSV.importRows(from: "Name,Value\nx,1\n", into: fresh)
         expect(false, "a non-ExpLog CSV is refused")

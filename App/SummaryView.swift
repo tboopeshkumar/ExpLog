@@ -13,7 +13,8 @@ struct SummaryView: View {
     @Query(sort: \Transaction.date, order: .reverse)
     private var transactions: [Transaction]
 
-    @State private var month = Formatting.monthStart(.now)
+    /// Shared with Expenses, so both tabs show the same month.
+    @Binding var month: Date
     /// Category or merchant view; remembered between launches.
     @AppStorage("summaryBreakdown") private var breakdown: Breakdown = .category
     /// Watched so the totals follow a change of main currency immediately.
@@ -23,18 +24,12 @@ struct SummaryView: View {
         MonthSummary(month: month, transactions: transactions, mainCurrency: mainCurrency)
     }
 
-    /// The furthest month worth stepping to: this one, or later when there are
-    /// future-dated expenses, such as instalments imported from Money Manager.
-    private var isLastMonth: Bool {
-        let latest = transactions.first?.date ?? .now   // sorted newest first
-        return month >= Formatting.monthStart(max(latest, .now))
-    }
 
     var body: some View {
         let summary = summary
         List {
             Section {
-                monthSwitcher
+                MonthSwitcher(month: $month)
                 headline(summary)
             }
 
@@ -95,22 +90,6 @@ struct SummaryView: View {
 
     // MARK: - Header
 
-    private var monthSwitcher: some View {
-        HStack {
-            Button("Previous month", systemImage: "chevron.left") { step(-1) }
-            Spacer()
-            Text(Formatting.monthTitle(month))
-                .font(.headline)
-            Spacer()
-            Button("Next month", systemImage: "chevron.right") { step(1) }
-                .disabled(isLastMonth)
-        }
-        .labelStyle(.iconOnly)
-        // Two buttons in one row: without this, a tap anywhere hits the first.
-        .buttonStyle(.borderless)
-        // The switcher and the total read as one header block.
-        .listRowSeparator(.hidden)
-    }
 
     private func headline(_ summary: MonthSummary) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -142,10 +121,6 @@ struct SummaryView: View {
         ).rows
     }
 
-    private func step(_ months: Int) {
-        guard let next = Calendar.current.date(byAdding: .month, value: months, to: month) else { return }
-        month = Formatting.monthStart(next)
-    }
 }
 
 /// One line of a breakdown: icon and name, amount and share, and a share bar.
