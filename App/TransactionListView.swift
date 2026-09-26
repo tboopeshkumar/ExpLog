@@ -127,6 +127,20 @@ struct TransactionListView: View {
 struct TransactionRow: View {
     let transaction: Transaction
 
+    /// "Sep 26 · Uncategorised · SIB Cashback"
+    private var details: String {
+        var parts = [transaction.date.formatted(.dateTime.day().month(.abbreviated))]
+        if transaction.category == nil {
+            parts.append("Uncategorised")
+        } else if let subcategory = transaction.subcategory {
+            parts.append(subcategory.name)
+        }
+        if let account = transaction.account {
+            parts.append(account.name)
+        }
+        return parts.joined(separator: " · ")
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             CategoryIcon(transaction.category)
@@ -134,25 +148,22 @@ struct TransactionRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(transaction.merchant.isEmpty ? "Unnamed" : transaction.merchant)
                     .lineLimit(1)
-                HStack(spacing: 4) {
-                    Text(transaction.date.formatted(.dateTime.day().month(.abbreviated)))
-                    if let account = transaction.account {
-                        Text("· \(account.name)")
-                    }
-                    if transaction.category == nil {
-                        Text("· Uncategorised")
-                    } else if let subcategory = transaction.subcategory {
-                        Text("· \(subcategory.name)")
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                // One line of text, not separate pieces side by side — those
+                // each wrapped in their own column when space ran out.
+                // Ordered by importance, since the end is what gets cut.
+                Text(details)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-
-            Spacer()
+            // Take all the width the amount leaves. A Spacer here would split
+            // it with the text, cutting the details short beside empty space.
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Formatting.moneyText(transaction.amount, code: transaction.currencyCode)
                 .monospacedDigit()
+                .layoutPriority(1)
         }
         .padding(.vertical, 2)
     }

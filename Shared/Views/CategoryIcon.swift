@@ -81,12 +81,25 @@ public struct CategoryIcon: View {
     }
 
     public var body: some View {
-        let tint = category?.tint ?? .gray
-        Image(systemName: category?.symbol ?? "questionmark")
-            .font(.system(size: size * 0.5, weight: .semibold))
-            .foregroundStyle(tint)
-            .frame(width: size, height: size)
-            .background(tint.opacity(0.16), in: .rect(cornerRadius: size * 0.28))
-            .accessibilityHidden(true)
+        if let category {
+            Image(systemName: category.symbol)
+                .font(.system(size: size * 0.5, weight: .semibold))
+                .foregroundStyle(category.tint)
+                .frame(width: size, height: size)
+                .background(category.tint.opacity(0.16), in: .rect(cornerRadius: size * 0.28))
+                .accessibilityHidden(true)
+        } else {
+            // No category yet: an empty, dashed slot waiting to be filled,
+            // rather than a "?" that reads like a missing image.
+            Image(systemName: "tag")
+                .font(.system(size: size * 0.45, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .frame(width: size, height: size)
+                .overlay {
+                    RoundedRectangle(cornerRadius: size * 0.28)
+                        .strokeBorder(.tertiary, style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
+                }
+                .accessibilityHidden(true)
+        }
     }
 }
