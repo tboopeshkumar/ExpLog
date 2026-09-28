@@ -176,12 +176,26 @@ struct ExchangeRatesView: View {
     @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
     @AppStorage(Currency.exchangeRatesKey, store: Currency.defaults) private var ratesJSON = ""
     @AppStorage(Currency.orderKey, store: Currency.defaults) private var order = ""
+    @AppStorage(Currency.hiddenKey, store: Currency.defaults) private var hidden = ""
 
     private var rates: ExchangeRates { ExchangeRates(main: mainCurrency, json: ratesJSON) }
 
     /// In your order, then any others spent in or with a rate.
     private var listed: [String] {
-        Currency.yours(order: order, main: mainCurrency, rates: rates, alsoUsed: Set(transactions.map(\.currencyCode)))
+        Currency.yours(order: order, main: mainCurrency, rates: rates,
+                       alsoUsed: Set(transactions.map(\.currencyCode)), hidden: hidden)
+    }
+
+    /// Off the list and out of the pickers' top section, its current rate
+    /// cleared. Expenses already logged keep their own rates.
+    private func remove(at offsets: IndexSet) {
+        let codes = listed
+        let removed = offsets.map { codes[$0] }
+        for code in removed {
+            ratesJSON = ExchangeRates.setting(nil, for: code, main: mainCurrency, in: ratesJSON)
+        }
+        order = Currency.order(codes.filter { !removed.contains($0) })
+        hidden = Currency.order(Currency.codes(hidden).filter { !removed.contains($0) } + removed)
     }
 
     var body: some View {
@@ -209,10 +223,11 @@ struct ExchangeRatesView: View {
                     codes.move(fromOffsets: from, toOffset: to)
                     order = Currency.order(codes)
                 }
+                .onDelete(perform: remove)
             } header: {
                 Text("From \(Currency.name(for: mainCurrency))")
             } footer: {
-                Text("When you log an expense, these are offered right after \(mainCurrency), in this order; tap Edit to drag them. New expenses in a currency take its rate here and keep it: changing a rate doesn't change expenses already logged. You can also adjust the rate on a single expense.")
+                Text("When you log an expense, these are offered right after \(mainCurrency), in this order; tap Edit to drag them. New expenses in a currency take its rate here and keep it: changing a rate, or removing a currency, doesn't change expenses already logged. You can also adjust the rate on a single expense.")
             }
 
             let addable = Currency.pickerOrder.filter { $0 != mainCurrency && !listed.contains($0) }
@@ -220,7 +235,10 @@ struct ExchangeRatesView: View {
                 Section {
                     Menu {
                         ForEach(addable, id: \.self) { code in
-                            Button("\(code) · \(Currency.name(for: code))") { order = Currency.order(listed + [code]) }
+                            Button("\(code) · \(Currency.name(for: code))") {
+                                order = Currency.order(listed + [code])
+                                hidden = Currency.order(Currency.codes(hidden).filter { $0 != code })
+                            }
                         }
                     } label: {
                         Label("Add a currency", systemImage: "plus")

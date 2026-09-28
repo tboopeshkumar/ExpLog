@@ -517,6 +517,10 @@ func run() throws {
            "the main currency, unknown codes and repeats are ignored")
     expect(Currency.yours(order: "", main: "AED", rates: noRates, alsoUsed: ["EUR", "AED"]) == ["EUR"],
            "a currency already spent in is listed too")
+    expect(Currency.yours(order: "", main: "AED", rates: noRates, alsoUsed: ["EUR", "JPY"], hidden: "EUR") == ["JPY"],
+           "…unless it was removed from the list")
+    expect(Currency.yours(order: "EUR", main: "AED", rates: noRates, alsoUsed: ["EUR"], hidden: "") == ["EUR"],
+           "added back, it's listed again")
     Currency.defaults = UserDefaults(suiteName: "\(probeSuite)-order")!
     Currency.setMain("AED")
     Currency.setOrder(["INR", "USD"])

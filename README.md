@@ -382,7 +382,9 @@ Your other currencies — any you've spent in, set a rate for or added — are
 listed in Settings → Other currencies & rates. Tap Edit to drag them into
 order: the form's currency menu offers the main currency, then yours in that
 order, then the rest below a divider, so a second currency you use often is one
-tap away. The order is stored with the main currency (`currencyOrder`); without
+tap away. Swipe one left to remove it: its current rate is cleared (expenses
+already logged keep theirs) and it stays off the list, even if you've spent in
+it, until you add it again. The order is stored with the main currency (`currencyOrder`); without
 an App Group the share extension can't read it, which matters little there,
 since an alert says its own currency.
 

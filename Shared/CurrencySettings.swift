@@ -45,12 +45,24 @@ extension Currency {
         yours(order: defaults.string(forKey: orderKey) ?? "", main: main, rates: exchangeRates)
     }
 
+    /// Currencies removed from the list in Settings, comma-separated. Kept so
+    /// one that's been spent in doesn't come straight back; adding it again
+    /// clears it from here.
+    public static let hiddenKey = "hiddenCurrencies"
+
     /// Those arranged in Settings, in that order; then any others with a
-    /// rate, or in `alsoUsed` (currencies already spent in), in the usual
-    /// order. Never the main currency.
-    public static func yours(order: String, main: String, rates: ExchangeRates, alsoUsed: Set<String> = []) -> [String] {
+    /// rate, or in `alsoUsed` (currencies already spent in) and not
+    /// `hidden`, in the usual order. Never the main currency.
+    public static func yours(
+        order: String,
+        main: String,
+        rates: ExchangeRates,
+        alsoUsed: Set<String> = [],
+        hidden: String = ""
+    ) -> [String] {
+        let alsoUsed = alsoUsed.subtracting(codes(hidden))
         var arranged: [String] = []
-        for code in order.split(separator: ",").map(String.init)
+        for code in codes(order)
         where supported.contains(code) && code != main && !arranged.contains(code) {
             arranged.append(code)
         }
@@ -65,9 +77,14 @@ extension Currency {
         defaults.set(order(codes), forKey: orderKey)
     }
 
-    /// `codes` as stored under `orderKey`.
+    /// `codes` as stored under `orderKey` or `hiddenKey`.
     public static func order(_ codes: [String]) -> String {
         codes.joined(separator: ",")
+    }
+
+    /// The codes in a stored list.
+    public static func codes(_ stored: String) -> [String] {
+        stored.split(separator: ",").map(String.init)
     }
 
     public static func setMain(_ code: String) {
