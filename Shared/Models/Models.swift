@@ -121,6 +121,26 @@ public final class MerchantAlias {
     }
 }
 
+/// Where the merchant sits in one bank's alert format, taught by picking the
+/// merchant's words out of a message. See MerchantFormat for the pattern.
+@Model
+public final class MessageFormat {
+    /// MerchantFormat's regular expression.
+    public var pattern: String = ""
+    /// The message it was learned from, to show in Settings.
+    public var sample: String = ""
+    /// The words picked in `sample`, as written there: "AMAZONUFR DI".
+    public var picked: String = ""
+    public var createdAt: Date = Date.now
+
+    public init(pattern: String, sample: String, picked: String) {
+        self.pattern = pattern
+        self.sample = sample
+        self.picked = picked
+        self.createdAt = .now
+    }
+}
+
 @Model
 public final class Transaction {
     public var amount: Decimal = Decimal(0)

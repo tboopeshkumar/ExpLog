@@ -57,6 +57,10 @@ It handles the traps these messages set:
 - **Shouting, truncated merchants.** `ROUND CLOCK MART SUPERMA` becomes
   `Round Clock Mart Superma`; words with digits keep their case, so `20THFLOOR`
   survives intact.
+- **Sentences that look like merchants.** `linked to account XX810001 was used
+  for …` fits the "paid to X for" shape. A candidate holding a masked number,
+  starting with "account" or "card", or containing a verb like "was" or
+  "debited" is refused, and the next pattern gets a turn.
 
 Amounts and dates are read however the bank writes them, not only the way
 UAE banks do:
@@ -67,7 +71,10 @@ UAE banks do:
   currency — `KWD 12.345` is three-decimal dinars, `JPY 1,850` is yen.
 - Numeric dates that read either way (`09/05/2026`) take whichever reading is
   nearest the message's arrival, since an alert arrives within a day or two of
-  the purchase. ISO (`2026-09-20`) and dotted (`20.09.2026`) dates work too.
+  the purchase. ISO (`2026-09-20`) and dotted (`20.09.2026`) dates work too,
+  and so do month-first ones (`Sep 27 2026`, `Sep 5th, 2026`).
+- A time is read wherever it appears — `at 11:30`, or `12:10PM` straight after
+  the date.
 
 Every transaction keeps its original SMS in `rawMessage`, so a parser bug can be
 fixed months later without losing data.
@@ -89,8 +96,9 @@ before touching the parser.**
 ./Tools/check-store.sh
 ```
 
-UI behaviour — swipes, sheets — is covered by a UI test run in the simulator
-(`UITests/QuickActionsUITests.swift`; see its header for the data it expects):
+UI behaviour — swipes, sheets, month switching, picking a merchant — is
+covered by UI tests run in the simulator (`UITests/`; each file's header says
+the data it expects, which `Tools/seed-demo.sh` provides):
 
 ```bash
 xcodebuild test -project ExpLog.xcodeproj -scheme ExpLog -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
@@ -144,11 +152,43 @@ The parser reads three- or four-digit cards and keeps them as written, so
 next alert. Settings → Test message parsing shows which card an alert matches.
 Rules in `Shared/AccountMatching.swift`, covered by `check-store.sh`.
 
-## Learning categories
+## Learning from messages
 
-Saving a transaction with a category records a `MerchantAlias` for that
-merchant. The next alert from the same place arrives already categorised. No
-training step, no rules to configure — it just gets quieter over time.
+**Categories.** Saving an expense from a message with a category records a
+`MerchantAlias`: the merchant as read from the message, the name you gave it,
+its category and subcategory. The next alert from the same place arrives
+already named and categorised. No training step — it just gets quieter over
+time. Settings → Merchants lists what's remembered; tap one to rename it or
+change its category (for future messages; logged expenses keep theirs), swipe
+to forget it.
+
+**Where the merchant is.** When a bank writes its alerts in a way the parser
+misreads, the button beside Merchant in the form (shown when the expense came
+from a message) opens the message as tappable words. Tap the merchant's first
+word, then its last. With "Remember for messages like this" on, ExpLog keeps
+where they were as a `MessageFormat`, and reads the merchant from the same
+place in that bank's later alerts. It works like this
+(`Shared/MerchantFormat.swift`):
+
+- The words before the merchant are the anchor. The ones that change between
+  alerts are wildcards: anything with a digit (cards, amounts, dates, times),
+  month and day names, AM/PM, currency codes. So another card, amount or date
+  in the same format still matches, and another bank's format doesn't.
+- The merchant ends where the picked words end: at their comma, or before the
+  next word. Picking `AMAZONUFR` out of `AMAZONUFR DI, AE` learns to leave out
+  the capitalised word before the comma (the city), so the next alert's
+  `CITYMART MOE DU, AE` reads `Citymart Moe`.
+- A pattern is only kept if it reads the picked words back out of the message
+  it came from. Picking again in the same format replaces the old one.
+
+Settings → Message formats lists them, each with its message and the merchant
+highlighted; swipe to forget one. The share extension can't see these when
+there's no App Group, so the app reads the message again with them when the
+expense arrives, unless you typed or picked a merchant in the share sheet.
+
+A merchant memory keyed on a sentence fragment, like one from an older parser's
+misreading, would pre-fill one shop's name and category on every alert in that
+format. These are dropped at launch.
 
 ## Building your own copy
 
@@ -213,10 +253,12 @@ Requires the paid developer account.
 ```
 Shared/           Compiled into both targets
   SMSParser.swift         Field extraction
+  MerchantFormat.swift    Merchant patterns learned from a picked message
+  LearnedParsing.swift    The parser plus what it has been taught
   ParsedTransaction.swift Parser output
   TransactionDraft.swift  Editable state, dedupe, alias learning
   SharedStore.swift       App Group SwiftData container
-  Models/Models.swift     Transaction, ExpenseCategory, Account, MerchantAlias
+  Models/Models.swift     Transaction, ExpenseCategory, Account, MerchantAlias, MessageFormat
   Views/                  The form used by both the app and the extension
 App/              Main app only
 ShareExtension/   Extension only

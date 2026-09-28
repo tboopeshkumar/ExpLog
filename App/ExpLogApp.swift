@@ -13,6 +13,7 @@ struct ExpLogApp: App {
                         let context = ModelContext(container)
                         SeedData.seedIfNeeded(context)
                         AccountMatching.foldLegacyDigits(in: context)
+                        LearnedParsing.forgetImplausibleAliases(in: context)
                         Currency.adoptMainIfUnset(from: context)
                     }
             case .failure(let error):

@@ -27,6 +27,9 @@ public struct TransactionFormView: View {
     private let showsCategoryAndAccount: Bool
 
     @State private var showRawMessage = false
+    @State private var pickingMerchant = false
+    /// What happened to the last pick, shown under the merchant.
+    @State private var pickNote: String?
     @State private var errorMessage: String?
     @FocusState private var amountFocused: Bool
 
@@ -124,7 +127,9 @@ public struct TransactionFormView: View {
             }
             if !draft.unparsedFields.isEmpty {
                 Label(
-                    "Couldn't read: \(draft.unparsedFields.joined(separator: ", ")). Check before saving.",
+                    draft.unparsedFields.contains("merchant") && draft.rawMessage != nil
+                        ? "Couldn't read: \(draft.unparsedFields.joined(separator: ", ")). Check before saving; the button beside Merchant picks it from the message."
+                        : "Couldn't read: \(draft.unparsedFields.joined(separator: ", ")). Check before saving.",
                     systemImage: "exclamationmark.triangle"
                 )
                 .foregroundStyle(.orange)
@@ -135,8 +140,31 @@ public struct TransactionFormView: View {
     @ViewBuilder
     private var detailSection: some View {
         Section {
-            TextField("Merchant", text: $draft.merchant)
-                .textInputAutocapitalization(.words)
+            HStack {
+                TextField("Merchant", text: $draft.merchant)
+                    .textInputAutocapitalization(.words)
+                // Misread? Pick the merchant's words out of the message.
+                if let raw = draft.rawMessage, !raw.isEmpty {
+                    Button("Pick merchant from message", systemImage: "text.viewfinder") {
+                        pickingMerchant = true
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("pickMerchant")
+                }
+            }
+            .sheet(isPresented: $pickingMerchant) {
+                MerchantPickerView(message: draft.rawMessage ?? "", current: draft.merchant) { words, remember in
+                    let learned = draft.pickMerchant(words, remember: remember, context: showsCategoryAndAccount ? context : nil)
+                    if remember {
+                        pickNote = learned
+                            ? "Messages like this one will read the merchant from the same place."
+                            : "Couldn't learn where the merchant is in this message, so it's set for this expense only."
+                    } else {
+                        pickNote = nil
+                    }
+                }
+            }
 
             DatePicker("Date", selection: $draft.date)
 
@@ -170,8 +198,13 @@ public struct TransactionFormView: View {
                 }
             }
         } footer: {
-            if !showsCategoryAndAccount {
-                Text("Card and category are matched by ExpLog when it opens.")
+            VStack(alignment: .leading, spacing: 4) {
+                if let pickNote {
+                    Text(pickNote)
+                }
+                if !showsCategoryAndAccount {
+                    Text("Card, category and learned merchant names are filled in by ExpLog when it opens.")
+                }
             }
         }
     }

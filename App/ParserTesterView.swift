@@ -8,7 +8,7 @@ struct ParserTesterView: View {
     @State private var text = ""
 
     private var parsed: ParsedTransaction? {
-        text.isEmpty ? nil : SMSParser.parse(text)
+        text.isEmpty ? nil : LearnedParsing.parse(text, in: context)
     }
 
     var body: some View {
@@ -25,7 +25,7 @@ struct ParserTesterView: View {
                         .foregroundStyle(.secondary)
                 }
             } else if let parsed {
-                Section("Read") {
+                Section {
                     row("Amount", parsed.amount.map { "\($0)" })
                     row("Currency", parsed.currency)
                     row("Merchant", parsed.merchant)
@@ -35,6 +35,12 @@ struct ParserTesterView: View {
                     row("Matches", AccountMatching.account(for: text, in: context)?.name ?? "No card — add a keyword")
                     row("Date", parsed.date?.formatted(.dateTime.day().month().year()))
                     row("Reference", parsed.reference)
+                } header: {
+                    Text("Read")
+                } footer: {
+                    if parsed.merchant != SMSParser.parse(text)?.merchant {
+                        Text("Merchant read from where you picked it in a message like this one (Settings → Message formats).")
+                    }
                 }
                 if !parsed.missingFields.isEmpty {
                     Section {

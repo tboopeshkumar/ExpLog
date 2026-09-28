@@ -26,6 +26,8 @@ let messages = [
     "Thank you for using Card ending 6150 at METRO POWER UTILITY for AED 310.00. Avl. limit is AED XXX.65.",
     "Thank you for using Card ending 6150 at STARLIGHT CINEMAS for AED 70.00. Avl. limit is AED XXX.65.",
     "Thank you for using Card ending 6150 at SKYWAYS AIR for AED 845.00. Avl. limit is AED XXX.65.",
+    // Left uncategorised: shows picking the merchant out of the message.
+    "Debit Card XX5528 linked to account XX660213 was used for AED72.57 on Sep 27 2026 12:10PM at SHOPNOVAUFR DI, AE. Available Balance AED 4210.50",
 ]
 
 /// Category each sample belongs to, so the demo shows icons rather than blanks.
@@ -44,7 +46,7 @@ let categoryForMessage = [
 
 @MainActor
 func seed() throws {
-    let schema = Schema([Transaction.self, ExpenseCategory.self, ExpenseSubcategory.self, Account.self, MerchantAlias.self])
+    let schema = Schema([Transaction.self, ExpenseCategory.self, ExpenseSubcategory.self, Account.self, MerchantAlias.self, MessageFormat.self])
     let configuration = ModelConfiguration(schema: schema, url: URL(fileURLWithPath: storePath))
     let container = try ModelContainer(for: schema, configurations: [configuration])
     let context = ModelContext(container)
@@ -61,7 +63,11 @@ func seed() throws {
 
     var added = 0
     for message in messages {
-        guard let parsed = SMSParser.parse(message) else { continue }
+        guard let parsed = LearnedParsing.parse(message, in: context) else { continue }
+        // Undated samples are dated now, so the duplicate check below can't
+        // see an earlier run's copy; the message itself can.
+        let raw: String? = parsed.raw
+        if try context.fetchCount(FetchDescriptor<Transaction>(predicate: #Predicate { $0.rawMessage == raw })) > 0 { continue }
         let draft = TransactionDraft(parsed: parsed, context: context)
         if TransactionDraft.duplicate(of: draft, in: context) != nil { continue }
         if let wanted = categoryForMessage[draft.merchant] {

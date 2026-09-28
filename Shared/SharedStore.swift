@@ -16,6 +16,7 @@ public enum SharedStore {
         ExpenseSubcategory.self,
         Account.self,
         MerchantAlias.self,
+        MessageFormat.self,
     ])
 
     /// Whether the app and the extension can share one database.

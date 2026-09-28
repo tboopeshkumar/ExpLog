@@ -10,6 +10,13 @@ import SwiftData
 // Covers what the share extension does when you tap Save: parse, resolve the
 // card, apply a learned category, write, read back, and refuse a duplicate.
 
+func timeFormatter(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd HH:mm"
+    return formatter.string(from: date)
+}
+
 @MainActor
 func run() throws {
     var failures = 0
@@ -749,6 +756,89 @@ func run() throws {
         expect(error is CSV.ImportError, "a non-ExpLog CSV is refused")
     }
 
+    print("\nLEARNING FROM MESSAGES  (pick the merchant once, the next alert follows)\n")
+
+    let learnURL = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: "ExpLogLearn-\(UUID().uuidString).store")
+    defer { try? FileManager.default.removeItem(at: learnURL) }
+    let learnContainer = try ModelContainer(
+        for: SharedStoreSchema.schema,
+        configurations: [ModelConfiguration(schema: SharedStoreSchema.schema, url: learnURL)]
+    )
+    let learn = ModelContext(learnContainer)
+    SeedData.seedIfNeeded(learn)
+    let shopCategory = try learn.fetch(FetchDescriptor<ExpenseCategory>()).first { $0.name == "Shopping" }!
+    let online = ExpenseSubcategory(name: "Online", category: shopCategory)
+    learn.insert(online)
+
+    // A memory keyed on a misreading, as the old parser left for this format.
+    learn.insert(MerchantAlias(key: "account xx660213 was used", displayName: "ShopNova", category: shopCategory))
+    learn.insert(MerchantAlias(key: "aman taxi", category: shopCategory))
+    try learn.save()
+    expect(LearnedParsing.forgetImplausibleAliases(in: learn) == 1, "a merchant memory keyed on a sentence fragment is forgotten")
+    expect(try learn.fetch(FetchDescriptor<MerchantAlias>()).map(\.key) == ["aman taxi"], "…and real ones are kept")
+
+    let bankSample = "Debit Card XX5528 linked to account XX660213 was used for AED72.57 on Sep 27 2026 12:10PM at SHOPNOVAUFR DI, AE. Available Balance AED 4210.50"
+    let firstDraft = TransactionDraft(parsed: LearnedParsing.parse(bankSample, in: learn)!, context: learn)
+    expect(firstDraft.merchant == "Shopnovaufr Di", "the parser reads the descriptor", firstDraft.merchant)
+
+    let nameWord = MerchantFormat.words(of: bankSample).firstIndex { $0.text == "SHOPNOVAUFR" }!
+    expect(firstDraft.pickMerchant(nameWord...nameWord, remember: true, context: learn), "picking the name learns the format")
+    expect(firstDraft.merchant == "Shopnovaufr", "the picked words become the merchant", firstDraft.merchant)
+    firstDraft.merchant = "ShopNova"
+    firstDraft.category = shopCategory
+    firstDraft.subcategory = online
+    try firstDraft.save(in: learn)
+    expect(try learn.fetchCount(FetchDescriptor<MessageFormat>()) == 1, "the format is saved with the expense")
+    let learnedAlias = TransactionDraft.alias(for: "Shopnovaufr", in: learn)
+    expect(learnedAlias?.displayName == "ShopNova" && learnedAlias?.subcategory === online,
+           "the merchant is remembered under the picked name, with its name and subcategory")
+
+    let nextAlert = "Debit Card XX9014 linked to account XX660213 was used for AED15.00 on Oct 2 2026 8:15PM at SHOPNOVAUFR DI, AE. Available Balance AED 4195.50"
+    let nextDraft = TransactionDraft(parsed: LearnedParsing.parse(nextAlert, in: learn)!, context: learn)
+    expect(nextDraft.merchant == "ShopNova" && nextDraft.category === shopCategory && nextDraft.subcategory === online,
+           "the next alert from that shop arrives named, categorised and subcategorised",
+           "\(nextDraft.merchant) \(nextDraft.category?.name ?? "-") \(nextDraft.subcategory?.name ?? "-")")
+    expect(timeFormatter(nextDraft.date) == "2026-10-02 20:15", "…on its own date and time", timeFormatter(nextDraft.date))
+
+    let otherShop = "Debit Card XX5528 linked to account XX660213 was used for AED40.00 on Oct 3 2026 1:00PM at CITYMART MOE DU, AE. Available Balance AED 4155.50"
+    let otherDraft = TransactionDraft(parsed: LearnedParsing.parse(otherShop, in: learn)!, context: learn)
+    expect(otherDraft.merchant == "Citymart Moe" && otherDraft.category == nil,
+           "another shop in the same format gets its own name, not the first shop's category",
+           "\(otherDraft.merchant) \(otherDraft.category?.name ?? "-")")
+
+    // Through the share extension: it reads without the learned format; the
+    // app reads the message again with it on receipt.
+    let fromShare = TransactionDraft()
+    fromShare.amount = 15
+    fromShare.merchant = SMSParser.parse(nextAlert)!.merchant!
+    fromShare.rawMessage = nextAlert
+    let arrived = TransactionLink.url(for: fromShare).flatMap { TransactionLink.draft(from: $0, context: learn) }
+    expect(arrived?.merchant == "ShopNova" && arrived?.subcategory === online,
+           "an alert shared from Messages is named and categorised on arrival", arrived?.merchant ?? "nil")
+
+    let edited = TransactionDraft()
+    edited.amount = 15
+    edited.merchant = "Birthday present"
+    edited.rawMessage = nextAlert
+    let receivedEdited = TransactionLink.url(for: edited).flatMap { TransactionLink.draft(from: $0, context: learn) }
+    expect(receivedEdited?.merchant == "Birthday present", "…but a merchant typed in the share sheet is kept")
+
+    // Picked in the share sheet: carried across and learned when saved.
+    let pickedInShare = TransactionDraft()
+    pickedInShare.amount = 40
+    pickedInShare.rawMessage = otherShop
+    let cityWord = MerchantFormat.words(of: otherShop).firstIndex { $0.text == "CITYMART" }!
+    pickedInShare.pickMerchant(cityWord...(cityWord + 2), remember: true, context: nil)
+    let carried = TransactionLink.url(for: pickedInShare).flatMap { TransactionLink.draft(from: $0, context: learn) }
+    expect(carried?.pickedFormat == pickedInShare.pickedFormat && carried?.merchant == "Citymart Moe Du",
+           "a merchant picked in the share sheet travels with it", carried?.merchant ?? "nil")
+    try carried?.save(in: learn)
+    let formatsNow = try learn.fetch(FetchDescriptor<MessageFormat>())
+    expect(formatsNow.count == 1 && formatsNow.first?.picked == "CITYMART MOE DU,",
+           "picking again in the same format replaces the old pattern rather than adding one",
+           formatsNow.map(\.picked).joined(separator: " | "))
+    expect(LearnedParsing.parse(nextAlert, in: learn)?.merchant == "Shopnovaufr Di", "…and the newest pick is what's read")
+
     print("")
     if failures == 0 {
         print("All checks passed.\n")
@@ -767,6 +857,7 @@ enum SharedStoreSchema {
         ExpenseSubcategory.self,
         Account.self,
         MerchantAlias.self,
+        MessageFormat.self,
     ])
 }
 

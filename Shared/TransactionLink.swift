@@ -23,6 +23,8 @@ public enum TransactionLink {
         static let rate = "rate"
         static let rateBase = "rateBase"
         static let raw = "raw"
+        static let format = "format"
+        static let picked = "picked"
     }
 
     // MARK: - Encode
@@ -46,6 +48,10 @@ public enum TransactionLink {
             items.append(URLQueryItem(name: Key.rateBase, value: base))
         }
         if let raw = draft.rawMessage { items.append(URLQueryItem(name: Key.raw, value: raw)) }
+        if let format = draft.pickedFormat {
+            items.append(URLQueryItem(name: Key.format, value: format.pattern))
+            items.append(URLQueryItem(name: Key.picked, value: format.picked))
+        }
 
         components.queryItems = items
         return components.url
@@ -94,12 +100,24 @@ public enum TransactionLink {
         if let text = draft.rawMessage ?? draft.parsedCard {
             draft.account = AccountMatching.account(for: text, in: context)
         }
-        if let raw = draft.rawMessage,
-           let parsedMerchant = SMSParser.parse(raw)?.merchant,
-           let alias = TransactionDraft.alias(for: parsedMerchant, in: context) {
-            draft.category = alias.category
-            draft.subcategory = alias.subcategory
-            if !alias.displayName.isEmpty { draft.merchant = alias.displayName }
+        if let raw = draft.rawMessage {
+            // A merchant picked in the share sheet, remembered when saved here.
+            if let pattern = values[Key.format], let picked = values[Key.picked] {
+                draft.pickedFormat = .init(pattern: pattern, sample: raw, picked: picked)
+            }
+            // The extension read the message without the formats learned
+            // here. Unless its merchant was edited or picked, read it again
+            // with them.
+            let formats = (draft.pickedFormat.map { [$0.pattern] } ?? []) + LearnedParsing.formats(in: context)
+            let unedited = draft.pickedFormat == nil && draft.merchant == (SMSParser.parse(raw)?.merchant ?? "")
+            if let merchant = SMSParser.parse(raw, formats: formats)?.merchant {
+                if unedited { draft.merchant = merchant }
+                if let alias = TransactionDraft.alias(for: merchant, in: context) {
+                    draft.category = alias.category
+                    draft.subcategory = alias.subcategory
+                    if unedited, !alias.displayName.isEmpty { draft.merchant = alias.displayName }
+                }
+            }
         }
 
         return draft

@@ -11,7 +11,10 @@ public enum SMSParser {
 
     // MARK: - Entry point
 
-    public static func parse(_ text: String, receivedAt: Date = Date()) -> ParsedTransaction? {
+    /// - Parameter formats: merchant patterns the user taught by picking the
+    ///   merchant out of a message (see MerchantFormat). Tried before the
+    ///   built-in patterns, so a correction wins over a guess.
+    public static func parse(_ text: String, receivedAt: Date = Date(), formats: [String] = []) -> ParsedTransaction? {
         let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty else { return nil }
         guard !isNonTransaction(message) else { return nil }
@@ -23,7 +26,8 @@ public enum SMSParser {
             result.currency = money.currency
             result.amount = money.amount
         }
-        result.merchant = matchMerchant(in: message)
+        result.merchant = formats.lazy.compactMap { MerchantFormat.merchant(in: message, pattern: $0) }.first
+            ?? matchMerchant(in: message)
         result.card = matchCard(in: message)
         result.date = matchDate(in: message, receivedAt: receivedAt)
         result.reference = matchReference(in: message)
@@ -139,18 +143,12 @@ public enum SMSParser {
         return nil
     }
 
-    private static func cleanMerchant(_ raw: String) -> String? {
+    /// Tidies merchant text for display; nil when it isn't a plausible name.
+    static func cleanMerchant(_ raw: String) -> String? {
         var value = raw
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet(charactersIn: " .,;:-*"))
-
-        // Guard against a match having swallowed a sentence fragment rather
-        // than a merchant name.
-        guard value.count >= 2, value.count <= 60 else { return nil }
-        guard value.rangeOfCharacter(from: .letters) != nil else { return nil }
-
-        let noise: Set<String> = ["your card", "card", "the agreed price", "a txn", "txn", "you"]
-        if noise.contains(value.lowercased()) { return nil }
+        guard isPlausibleMerchant(value) else { return nil }
 
         // Merchant strings arrive shouting and truncated ("ROUND CLOCK MART
         // SUPERMA"). The truncation is preserved — an alias can map it to a
@@ -166,6 +164,27 @@ public enum SMSParser {
                 .joined(separator: " ")
         }
         return value
+    }
+
+    /// False for text a pattern swallowed that is a sentence fragment rather
+    /// than a name — "account XX810001 was used" from "linked to account
+    /// XX810001 was used for …". Public so learned merchants saved from such a
+    /// misreading can be recognised and dropped.
+    public static func isPlausibleMerchant(_ value: String) -> Bool {
+        guard value.count >= 2, value.count <= 60 else { return false }
+        guard value.rangeOfCharacter(from: .letters) != nil else { return false }
+
+        let noise: Set<String> = ["your card", "card", "the agreed price", "a txn", "txn", "you"]
+        if noise.contains(value.lowercased()) { return false }
+
+        let fragments = [
+            // A masked card or account number belongs to the sentence, not a shop.
+            #"[X*#]{2,}\d"#,
+            #"^(?:your\s+)?(?:account|a/c|card)\b"#,
+            // Verbs a shop name doesn't contain, but the rest of the sentence does.
+            #"\b(?:was|were|has been|have been|linked to|debited|credited)\b"#,
+        ]
+        return !fragments.contains { firstMatch(of: $0, in: value, caseInsensitive: true) != nil }
     }
 
     // MARK: - Card
@@ -196,6 +215,8 @@ public enum SMSParser {
     /// 20-Sep" resolves to the date and not to the word after the first "on".
     private static let datePatterns = [
         #"\bon\s+(\d{1,2}[-/ ][A-Za-z]{3,9}(?:[-/ ]\d{2,4})?)"#,
+        // Month first — "on Sep 27 2026", "on Sep 27, 2026", "on September 27".
+        #"\bon\s+([A-Za-z]{3,9}\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?)\b"#,
         #"\bon\s+(\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})"#,
         #"\bon\s+(\d{4}-\d{1,2}-\d{1,2})"#,
         #"\b(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})\b"#,
@@ -209,6 +230,7 @@ public enum SMSParser {
         "d-MMM-yyyy", "d-MMM-yy", "d-MMM",
         "d/MMM/yyyy", "d/MMM/yy", "d/MMM",
         "d MMM yyyy", "d MMM yy", "d MMM",
+        "MMM d yyyy", "MMM d", "MMMM d yyyy", "MMMM d",
     ]
 
     /// Both orders, day-first and month-first; parseDateToken chooses.
@@ -228,8 +250,9 @@ public enum SMSParser {
         }
         guard let day else { return nil }
 
-        // Fold in a time of day when the message carries one.
-        guard let groups = firstMatch(of: #"\bat\s+(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?"#, in: text),
+        // Fold in a time of day when the message carries one: "at 11:30",
+        // or straight after the date, "Sep 27 2026 12:10PM".
+        guard let groups = firstMatch(of: #"\b(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?\b"#, in: text),
               groups.count >= 3,
               var hour = groups[1].flatMap({ Int($0) }),
               let minute = groups[2].flatMap({ Int($0) }) else { return day }
@@ -244,7 +267,13 @@ public enum SMSParser {
     }
 
     private static func parseDateToken(_ token: String, receivedAt: Date) -> Date? {
-        let normalized = token.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        var normalized = token.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        if normalized.contains(where: \.isLetter) {
+            // "Sep. 27th, 2026" → "Sep 27 2026", the shape the formats expect.
+            normalized = normalized
+                .replacingOccurrences(of: #"(\d)(?:st|nd|rd|th)\b"#, with: "$1", options: .regularExpression)
+                .replacingOccurrences(of: #"[.,]"#, with: "", options: .regularExpression)
+        }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .current
 

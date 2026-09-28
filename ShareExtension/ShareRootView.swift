@@ -81,7 +81,7 @@ struct ShareRootView: View {
 
     private func prepare() {
         guard draft == nil else { return }
-        guard let parsed = SMSParser.parse(sharedText) else { return }
+        guard let parsed = LearnedParsing.parse(sharedText, in: context) else { return }
 
         let newDraft = TransactionDraft(parsed: parsed, context: context)
         draft = newDraft

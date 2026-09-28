@@ -7,5 +7,6 @@ swiftc -O -o .build/parsercheck \
     Shared/ParsedTransaction.swift \
     Shared/Currency.swift \
     Shared/SMSParser.swift \
+    Shared/MerchantFormat.swift \
     Tools/ParserCheck/main.swift
 exec ./.build/parsercheck

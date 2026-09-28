@@ -36,8 +36,8 @@ final class QuickActionsUITests: XCTestCase {
         snapshot("2 categorise sheet")
         taxi.tap()
         XCTAssertTrue(app.staticTexts["Aman Taxi"].waitForExistence(timeout: 5))
-        let details = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS 'Taxi'",
-                                                           Date.now.formatted(.dateTime.day().month(.abbreviated)))).firstMatch
+        // The details line, "26 Sep · Taxi · …", whatever day the expense is on.
+        let details = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '· Taxi'")).firstMatch
         XCTAssertTrue(details.waitForExistence(timeout: 5), "the row now shows the subcategory")
         snapshot("3 after categorising")
 

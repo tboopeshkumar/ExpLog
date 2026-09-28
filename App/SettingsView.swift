@@ -58,11 +58,19 @@ struct SettingsView: View {
             }
 
             Section {
+                NavigationLink { MerchantsView() } label: {
+                    Label("Merchants", systemImage: "storefront")
+                }
+                NavigationLink { MessageFormatsView() } label: {
+                    Label("Message formats", systemImage: "text.viewfinder")
+                }
                 NavigationLink { ParserTesterView() } label: {
                     Label("Test message parsing", systemImage: "text.magnifyingglass")
                 }
+            } header: {
+                Text("Learned from messages")
             } footer: {
-                Text("Paste a bank SMS to see exactly which fields ExpLog reads from it.")
+                Text("The names and categories remembered for merchants, and where to find the merchant in each bank's messages. Paste a bank SMS into the tester to see exactly what ExpLog reads from it.")
             }
         }
         .navigationTitle("Settings")

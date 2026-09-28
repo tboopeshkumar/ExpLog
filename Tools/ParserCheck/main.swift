@@ -17,6 +17,7 @@ struct Expectation {
     let card: String?        // as the SMS writes it, mask included
     let day: String?          // "yyyy-MM-dd", nil when the SMS carries no date
     let reference: String?
+    var time: String? = nil   // "HH:mm", checked when given
 }
 
 let referenceDate: Date = {
@@ -149,6 +150,20 @@ let cases: [Expectation] = [
         merchant: "Harbour Cafe", card: "XXXX1234",
         day: "2026-09-17", reference: nil
     ),
+    Expectation(
+        label: "Debit card linked to account, month-first date",
+        message: "Debit Card XX5528 linked to account XX660213 was used for AED72.57 on Sep 27 2026 12:10PM at SHOPNOVAUFR DI, AE. Available Balance AED 4210.50",
+        amount: Decimal(string: "72.57"), currency: "AED",
+        merchant: "Shopnovaufr Di", card: "XX5528",
+        day: "2026-09-27", reference: nil, time: "12:10"
+    ),
+    Expectation(
+        label: "Month-first date with comma and ordinal",
+        message: "Your card XXXX1234 was used at CORNER DELI for USD 9.00 on Sep 5th, 2026 at 9:05 AM.",
+        amount: Decimal(string: "9.00"), currency: "USD",
+        merchant: "Corner Deli", card: "XXXX1234",
+        day: "2026-09-05", reference: nil, time: "09:05"
+    ),
 ]
 
 /// Messages the parser must refuse, so an OTP never lands in the ledger.
@@ -166,6 +181,14 @@ let dayFormatter: DateFormatter = {
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.timeZone = .current
     formatter.dateFormat = "yyyy-MM-dd"
+    return formatter
+}()
+
+let timeFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = .current
+    formatter.dateFormat = "HH:mm"
     return formatter
 }()
 
@@ -199,6 +222,9 @@ for testCase in cases {
     check("card", parsed.card, testCase.card)
     check("date", parsed.date.map { dayFormatter.string(from: $0) }, testCase.day)
     check("ref", parsed.reference, testCase.reference)
+    if let time = testCase.time {
+        check("time", parsed.date.map { timeFormatter.string(from: $0) }, time)
+    }
     print("")
 }
 
@@ -212,6 +238,54 @@ for (label, message) in mustReject {
         print("  ✗ \(label) — parsed as \(parsed!.amount.map { "\($0)" } ?? "?") at \(parsed!.merchant ?? "?")")
         failures += 1
     }
+}
+
+print("\nLEARNED MERCHANT FORMATS\n")
+
+// The user picks the merchant's words in one message; the next message in
+// the same format should give up its merchant from the same place.
+let sample = "Debit Card XX5528 linked to account XX660213 was used for AED72.57 on Sep 27 2026 12:10PM at SHOPNOVAUFR DI, AE. Available Balance AED 4210.50"
+let sameBank = "Debit Card XX9014 linked to account XX660213 was used for USD 1,204.00 on Oct 3 2026 9:02AM at CITYMART MOE DU, AE. Available Balance AED 3006.50"
+let otherBank = "Your card XXXX4417 was used at NORTH LANE PHARMACY for AED 64.50 on 21-Sep."
+let sampleWords = MerchantFormat.words(of: sample).map(\.text)
+let first = sampleWords.firstIndex(of: "SHOPNOVAUFR")!
+
+func checkFormat(_ label: String, picking picked: ClosedRange<Int>, sameBankGives expected: String) {
+    print("  \(label)")
+    check("picked", MerchantFormat.merchant(picking: picked, of: sample), picked.count == 1 ? "Shopnovaufr" : "Shopnovaufr Di")
+    guard let pattern = MerchantFormat.pattern(from: sample, picking: picked) else {
+        print("    ✗ no pattern learned\n")
+        failures += 1
+        return
+    }
+    check("sample", MerchantFormat.merchant(in: sample, pattern: pattern), MerchantFormat.merchant(picking: picked, of: sample))
+    check("next", MerchantFormat.merchant(in: sameBank, pattern: pattern), expected)
+    check("other", MerchantFormat.merchant(in: otherBank, pattern: pattern), nil)
+    // Through the parser: the learned format wins, other formats are untouched.
+    check("parse", SMSParser.parse(sameBank, receivedAt: referenceDate, formats: [pattern])?.merchant, expected)
+    check("parse 2", SMSParser.parse(otherBank, receivedAt: referenceDate, formats: [pattern])?.merchant, "North Lane Pharmacy")
+    print("")
+}
+
+checkFormat("Whole descriptor picked", picking: first...(first + 1), sameBankGives: "Citymart Moe Du")
+checkFormat("Name only, city left out", picking: first...first, sameBankGives: "Citymart Moe")
+
+print("  Merchant mid-sentence, followed by a plain word")
+let midSentence = "Purchase of AED 12.00 with Card XXX453 at QUICKSTOP MART on 22-Sep. Avl bal AED XXXX.10"
+let midWords = MerchantFormat.words(of: midSentence).map(\.text)
+let quickstop = midWords.firstIndex(of: "QUICKSTOP")!
+let midPattern = MerchantFormat.pattern(from: midSentence, picking: quickstop...(quickstop + 1))
+check("next", midPattern.flatMap {
+    MerchantFormat.merchant(in: "Purchase of AED 7.50 with Card XXX453 at BLUE DOOR CAFE on 23-Sep. Avl bal AED XXXX.60", pattern: $0)
+}, "Blue Door Cafe")
+print("")
+
+print("SENTENCE FRAGMENTS AREN'T MERCHANTS\n")
+for (text, plausible) in [
+    ("account XX660213 was used", false), ("Card ending 6150", false),
+    ("amount debited", false), ("Used Books Corner", true), ("Mega Center Riverton Xyz", true),
+] {
+    check(text, SMSParser.isPlausibleMerchant(text), plausible, indent: "  ")
 }
 
 print("")

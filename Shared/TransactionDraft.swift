@@ -36,6 +36,21 @@ public final class TransactionDraft {
     /// matches, so the form can offer to create one with it as the keyword.
     public var parsedCard: String?
 
+    /// Where the merchant was picked from in `rawMessage`, to remember for
+    /// messages like it when this expense is saved.
+    public struct PickedFormat: Equatable {
+        public let pattern: String
+        public let sample: String
+        public let picked: String
+
+        public init(pattern: String, sample: String, picked: String) {
+            self.pattern = pattern
+            self.sample = sample
+            self.picked = picked
+        }
+    }
+    public var pickedFormat: PickedFormat?
+
     /// The transaction being edited, when editing rather than creating.
     private var existing: Transaction?
 
@@ -109,6 +124,33 @@ public final class TransactionDraft {
         draft.category = category
         draft.subcategory = subcategory?.category === category ? subcategory : nil
         try draft.save(in: context)
+    }
+
+    /// Sets the merchant to words picked out of the original message. With
+    /// `remember`, the place they were picked from is kept to read the
+    /// merchant from messages in the same format; false when that couldn't
+    /// be learned from this message. What's already known about the merchant
+    /// — its name, its category if none is chosen yet — is filled in.
+    @discardableResult
+    public func pickMerchant(_ words: ClosedRange<Int>, remember: Bool, context: ModelContext?) -> Bool {
+        guard let raw = rawMessage, let name = MerchantFormat.merchant(picking: words, of: raw) else { return false }
+        merchant = name
+        pickedFormat = nil
+
+        var learned = false
+        if remember, let pattern = MerchantFormat.pattern(from: raw, picking: words) {
+            let picked = MerchantFormat.words(of: raw)[words].map(\.text).joined(separator: " ")
+            pickedFormat = PickedFormat(pattern: pattern, sample: raw, picked: picked)
+            learned = true
+        }
+        if let context, let alias = Self.alias(for: name, in: context) {
+            if !alias.displayName.isEmpty { merchant = alias.displayName }
+            if category == nil {
+                category = alias.category
+                subcategory = alias.subcategory
+            }
+        }
+        return learned
     }
 
     /// The rate from Settings for the current currency, against today's main
@@ -189,16 +231,23 @@ public final class TransactionDraft {
         transaction.subcategory = subcategory?.category === category ? subcategory : nil
         transaction.account = account
 
+        // The format first, so the merchant is learned under the name it
+        // reads out of the next message.
+        if let pickedFormat {
+            LearnedParsing.learn(pickedFormat, in: context)
+            self.pickedFormat = nil
+        }
         learnAlias(in: context)
         try context.save()
         return transaction
     }
 
-    /// Records merchant → category so the next alert from the same place
-    /// arrives already categorised.
+    /// Records merchant → name, category and subcategory, keyed on the
+    /// merchant as read from the message, so the next alert from the same
+    /// place arrives named and categorised the same way.
     private func learnAlias(in context: ModelContext) {
         guard let category, let rawMessage, !rawMessage.isEmpty else { return }
-        guard let parsedMerchant = SMSParser.parse(rawMessage)?.merchant else { return }
+        guard let parsedMerchant = LearnedParsing.parse(rawMessage, in: context)?.merchant else { return }
 
         let key = parsedMerchant.lowercased()
         let display = merchant.trimmingCharacters(in: .whitespaces)
