@@ -52,10 +52,17 @@ final class QuickActionsUITests: XCTestCase {
         app.buttons["Copy"].tap()
         XCTAssertTrue(app.navigationBars["Expense"].waitForExistence(timeout: 5), "the copy opens in the form")
         snapshot("5 copy form")
-        let before = app.staticTexts.matching(identifier: "Aman Taxi").count
+        // Counted among today's rows, at the top: the list only keeps the
+        // rows on screen, so a count of every "Aman Taxi" wouldn't grow.
+        app.navigationBars["Expense"].buttons["Cancel"].tap()
+        let today = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS '· Taxi'",
+                                                         Date.now.formatted(.dateTime.day().month(.abbreviated))))
+        let before = today.count
+        app.staticTexts["Aman Taxi"].firstMatch.swipeRight()
+        app.buttons["Copy"].tap()
+        XCTAssertTrue(app.navigationBars["Expense"].waitForExistence(timeout: 5))
         app.navigationBars["Expense"].buttons["Save"].tap()
-        let after = app.staticTexts.matching(identifier: "Aman Taxi")
-        XCTAssertTrue(after.element(boundBy: before).waitForExistence(timeout: 5), "the copy was added")
+        XCTAssertTrue(today.element(boundBy: before).waitForExistence(timeout: 5), "the copy was added, dated today")
         snapshot("6 after copying")
     }
 

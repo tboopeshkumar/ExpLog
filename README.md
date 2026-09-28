@@ -378,7 +378,15 @@ the device's region. The form's currency sign is a menu, for spending abroad,
 and the parser recognises about thirty major currencies in alerts
 (`Shared/Currency.swift`).
 
-Totals are always in the main currency. Settings → Exchange rates holds the
+Your other currencies — any you've spent in, set a rate for or added — are
+listed in Settings → Other currencies & rates. Tap Edit to drag them into
+order: the form's currency menu offers the main currency, then yours in that
+order, then the rest below a divider, so a second currency you use often is one
+tap away. The order is stored with the main currency (`currencyOrder`); without
+an App Group the share extension can't read it, which matters little there,
+since an alert says its own currency.
+
+Totals are always in the main currency. The same screen holds the
 current rate for each other currency (1 AED = 22.70 INR); an expense in another
 currency takes that rate when it's logged and **keeps it** — changing the rate
 later affects only expenses logged afterwards, so past totals never move. The

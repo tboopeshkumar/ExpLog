@@ -84,9 +84,19 @@ public struct TransactionFormView: View {
             HStack {
                 // Tap the sign to log an expense in another currency.
                 Menu {
+                    // Yours first — main, then the order set in Settings —
+                    // divided from the rest.
+                    let yours = [Currency.main] + Currency.yours
                     Picker("Currency", selection: $draft.currencyCode) {
-                        ForEach(Currency.pickerOrder, id: \.self) { code in
-                            Text("\(code) · \(Currency.name(for: code))").tag(code)
+                        Section {
+                            ForEach(yours, id: \.self) { code in
+                                Text("\(code) · \(Currency.name(for: code))").tag(code)
+                            }
+                        }
+                        Section {
+                            ForEach(Currency.supported.filter { !yours.contains($0) }, id: \.self) { code in
+                                Text("\(code) · \(Currency.name(for: code))").tag(code)
+                            }
                         }
                     }
                 } label: {

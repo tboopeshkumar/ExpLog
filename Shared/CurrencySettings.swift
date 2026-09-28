@@ -25,9 +25,49 @@ extension Currency {
         return fallback
     }
 
-    /// Supported currencies with the main one first, for pickers.
+    /// Supported currencies for pickers: the main one, then yours in your
+    /// order, then the rest.
     public static var pickerOrder: [String] {
-        [main] + supported.filter { $0 != main }
+        let top = [main] + yours
+        return top + supported.filter { !top.contains($0) }
+    }
+
+    // MARK: - Your currencies
+
+    /// The order the other currencies were dragged into in Settings →
+    /// Currencies, comma-separated ("INR,USD") so a view can watch it with
+    /// @AppStorage.
+    public static let orderKey = "currencyOrder"
+
+    /// The other currencies you use, offered right after the main one when
+    /// logging an expense.
+    public static var yours: [String] {
+        yours(order: defaults.string(forKey: orderKey) ?? "", main: main, rates: exchangeRates)
+    }
+
+    /// Those arranged in Settings, in that order; then any others with a
+    /// rate, or in `alsoUsed` (currencies already spent in), in the usual
+    /// order. Never the main currency.
+    public static func yours(order: String, main: String, rates: ExchangeRates, alsoUsed: Set<String> = []) -> [String] {
+        var arranged: [String] = []
+        for code in order.split(separator: ",").map(String.init)
+        where supported.contains(code) && code != main && !arranged.contains(code) {
+            arranged.append(code)
+        }
+        let others = supported.filter {
+            $0 != main && !arranged.contains($0) && (rates.rate(for: $0) != nil || alsoUsed.contains($0))
+        }
+        return arranged + others
+    }
+
+    /// Stores `codes` as the order of your currencies.
+    public static func setOrder(_ codes: [String]) {
+        defaults.set(order(codes), forKey: orderKey)
+    }
+
+    /// `codes` as stored under `orderKey`.
+    public static func order(_ codes: [String]) -> String {
+        codes.joined(separator: ",")
     }
 
     public static func setMain(_ code: String) {

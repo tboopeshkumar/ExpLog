@@ -25,7 +25,7 @@ struct SettingsView: View {
                 .pickerStyle(.navigationLink)
 
                 NavigationLink { ExchangeRatesView() } label: {
-                    Label("Exchange rates", systemImage: "arrow.left.arrow.right")
+                    Label("Other currencies & rates", systemImage: "arrow.left.arrow.right")
                 }
             } footer: {
                 Text("New expenses start in \(Currency.name(for: mainCurrency)), and totals are counted in it. Other currencies count at the rate each expense was logged with.")
@@ -166,24 +166,22 @@ private struct ImportReport {
 
 // MARK: - Exchange rates
 
-/// The current rate for each other currency. Used for expenses logged from
-/// now on — each expense keeps the rate it was logged with, so changing one
-/// here leaves past totals alone.
+/// Your other currencies: the current rate for each, and the order they're
+/// offered in when logging an expense. Rates are for expenses logged from now
+/// on — each expense keeps the rate it was logged with, so changing one here
+/// leaves past totals alone.
 struct ExchangeRatesView: View {
     @Environment(\.modelContext) private var context
     @Query private var transactions: [Transaction]
     @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
     @AppStorage(Currency.exchangeRatesKey, store: Currency.defaults) private var ratesJSON = ""
-    @State private var added: [String] = []
+    @AppStorage(Currency.orderKey, store: Currency.defaults) private var order = ""
 
     private var rates: ExchangeRates { ExchangeRates(main: mainCurrency, json: ratesJSON) }
 
-    /// Currencies spent in, then any with a rate, then any added here.
+    /// In your order, then any others spent in or with a rate.
     private var listed: [String] {
-        let spent = Set(transactions.map(\.currencyCode))
-        return Currency.supported.filter { code in
-            code != mainCurrency && (spent.contains(code) || rates.rate(for: code) != nil || added.contains(code))
-        }
+        Currency.yours(order: order, main: mainCurrency, rates: rates, alsoUsed: Set(transactions.map(\.currencyCode)))
     }
 
     var body: some View {
@@ -204,11 +202,17 @@ struct ExchangeRatesView: View {
                             try? context.save()
                         }
                     )
+                    .accessibilityIdentifier("currency-\(code)")
+                }
+                .onMove { from, to in
+                    var codes = listed
+                    codes.move(fromOffsets: from, toOffset: to)
+                    order = Currency.order(codes)
                 }
             } header: {
                 Text("From \(Currency.name(for: mainCurrency))")
             } footer: {
-                Text("New expenses in these currencies take this rate, and keep it: changing a rate here doesn't change expenses already logged. You can also adjust the rate on a single expense.")
+                Text("When you log an expense, these are offered right after \(mainCurrency), in this order; tap Edit to drag them. New expenses in a currency take its rate here and keep it: changing a rate doesn't change expenses already logged. You can also adjust the rate on a single expense.")
             }
 
             let addable = Currency.pickerOrder.filter { $0 != mainCurrency && !listed.contains($0) }
@@ -216,7 +220,7 @@ struct ExchangeRatesView: View {
                 Section {
                     Menu {
                         ForEach(addable, id: \.self) { code in
-                            Button("\(code) · \(Currency.name(for: code))") { added.append(code) }
+                            Button("\(code) · \(Currency.name(for: code))") { order = Currency.order(listed + [code]) }
                         }
                     } label: {
                         Label("Add a currency", systemImage: "plus")
@@ -224,8 +228,11 @@ struct ExchangeRatesView: View {
                 }
             }
         }
-        .navigationTitle("Exchange rates")
+        .navigationTitle("Currencies")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if listed.count > 1 { EditButton() }
+        }
     }
 }
 

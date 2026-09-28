@@ -503,6 +503,27 @@ func run() throws {
     expect(Currency.main == "GBP", "…and never overrides a choice")
     expect(Currency.pickerOrder.first == "GBP" && Set(Currency.pickerOrder) == Set(Currency.supported),
            "pickers list the main currency first")
+
+    // Your currencies: dragged into an order in Settings, offered first.
+    let noRates = ExchangeRates(main: "AED", json: "")
+    expect(Currency.yours(order: "", main: "AED", rates: noRates).isEmpty, "no rates, nothing arranged: no currencies of yours")
+    let someRates = ExchangeRates(main: "AED", stored: ["AED>INR": 22.7, "AED>USD": Decimal(string: "0.2723")!])
+    expect(Currency.yours(order: "", main: "AED", rates: someRates) == Currency.supported.filter { ["INR", "USD"].contains($0) },
+           "currencies with a rate are yours, in the usual order until arranged")
+    expect(Currency.yours(order: "USD,INR", main: "AED", rates: someRates) == ["USD", "INR"], "…then in the order dragged")
+    expect(Currency.yours(order: "EUR,USD", main: "AED", rates: someRates) == ["EUR", "USD", "INR"],
+           "one added without a rate keeps its place; one with a rate not yet arranged follows")
+    expect(Currency.yours(order: "AED,XYZ,USD,USD", main: "AED", rates: noRates) == ["USD"],
+           "the main currency, unknown codes and repeats are ignored")
+    expect(Currency.yours(order: "", main: "AED", rates: noRates, alsoUsed: ["EUR", "AED"]) == ["EUR"],
+           "a currency already spent in is listed too")
+    Currency.defaults = UserDefaults(suiteName: "\(probeSuite)-order")!
+    Currency.setMain("AED")
+    Currency.setOrder(["INR", "USD"])
+    expect(Array(Currency.pickerOrder.prefix(3)) == ["AED", "INR", "USD"] && Set(Currency.pickerOrder) == Set(Currency.supported),
+           "the picker lists main, then yours in order, then every other currency once",
+           Currency.pickerOrder.prefix(4).joined(separator: " "))
+    UserDefaults().removePersistentDomain(forName: "\(probeSuite)-order")
     Currency.defaults = pinned
 
     // Never one number across currencies.
