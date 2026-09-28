@@ -15,20 +15,22 @@ struct SettingsView: View {
     var body: some View {
         List {
             Section {
-                Picker(selection: $mainCurrency) {
-                    ForEach(Currency.pickerOrder, id: \.self) { code in
-                        Text("\(code) · \(Currency.name(for: code))").tag(code)
-                    }
+                // Just the code here; the list names each currency.
+                NavigationLink {
+                    MainCurrencyPicker(selection: $mainCurrency)
                 } label: {
-                    Label("Main currency", systemImage: "banknote")
+                    LabeledContent {
+                        Text(mainCurrency)
+                    } label: {
+                        Label("Main currency", systemImage: "banknote")
+                    }
                 }
-                .pickerStyle(.navigationLink)
 
                 NavigationLink { ExchangeRatesView() } label: {
                     Label("Other currencies & rates", systemImage: "arrow.left.arrow.right")
                 }
             } footer: {
-                Text("New expenses start in \(Currency.name(for: mainCurrency)), and totals are counted in it. Other currencies count at the rate each expense was logged with.")
+                Text("New expenses start in \(mainCurrency), and totals are counted in it. Other currencies count at the rate each expense was logged with.")
             }
 
             Section {
@@ -164,6 +166,40 @@ private struct ImportReport {
     }
 }
 
+// MARK: - Main currency
+
+/// Every supported currency by code and name; choosing one goes back.
+private struct MainCurrencyPicker: View {
+    @Binding var selection: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List(Currency.pickerOrder, id: \.self) { code in
+            Button {
+                selection = code
+                dismiss()
+            } label: {
+                HStack {
+                    Text(code)
+                        .monospaced()
+                    Text(Currency.name(for: code))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if code == selection {
+                        Image(systemName: "checkmark")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.tint)
+                    }
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+        }
+        .navigationTitle("Main currency")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 // MARK: - Exchange rates
 
 /// Your other currencies: the current rate for each, and the order they're
@@ -225,7 +261,7 @@ struct ExchangeRatesView: View {
                 }
                 .onDelete(perform: remove)
             } header: {
-                Text("From \(Currency.name(for: mainCurrency))")
+                Text("Rates from \(mainCurrency)")
             } footer: {
                 Text("When you log an expense, these are offered right after \(mainCurrency), in this order; tap Edit to drag them. New expenses in a currency take its rate here and keep it: changing a rate, or removing a currency, doesn't change expenses already logged. You can also adjust the rate on a single expense.")
             }
