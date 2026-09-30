@@ -36,6 +36,8 @@ struct RootView: View {
     /// The month on screen in both Expenses and Summary. Not remembered:
     /// the app opens on this month.
     @State private var month = Formatting.monthStart(.now)
+    /// An expense the Shortcuts action opened the app to review.
+    @State private var review = MessageReview.shared
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -56,6 +58,13 @@ struct RootView: View {
             guard phase == .active else { return }
             let added = SharedInbox.importPending(into: context)
             if !added.isEmpty { imported = added }
+        }
+        .sheet(item: $review.draft) { draft in
+            NavigationStack {
+                TransactionFormView(draft: draft, onSave: { review.draft = nil }, onCancel: { review.draft = nil })
+                    .navigationTitle("From Messages")
+                    .navigationBarTitleDisplayMode(.inline)
+            }
         }
         .alert(importTitle, isPresented: .constant(!imported.isEmpty)) {
             Button("OK") { imported = [] }

@@ -335,6 +335,33 @@ and at today's exchange rate). Swipe left to delete. The same three are in the
 long-press menu, in the expense list and the Summary drill-downs. Categorising
 this way saves through the editor's path, so a merchant from an SMS is learned.
 
+## Logging alerts automatically
+
+ExpLog adds a Shortcuts action, **Log Expense from Message**
+(`App/LogExpenseIntent.swift`). Given an SMS, it does what sharing the message
+does — learned formats, card keywords, remembered merchant names and
+categories, the duplicate check — and saves, without opening the app. It skips
+OTPs, declines and anything without an amount, and says "Already logged" for an
+alert that's already there. An alert with no merchant is saved under its card
+("Card XX5528") so nothing is lost.
+
+To have alerts logged as they arrive, make a personal automation in Shortcuts:
+
+1. Automation → **+** → **When I Receive a Message**.
+2. Filter **Message contains** a phrase every alert from your bank uses (such
+   as "was used for"). Matching the text is more reliable than the sender,
+   which for banks is a name like "ADCB" rather than a contact.
+3. Leave **Automation** on and turn **Confirm Before Run** off.
+4. Add **Log Expense from Message** and set its Message to the trigger's
+   **Message** variable.
+
+Make one per bank if their wording differs. Settings → Shortcuts → **Review
+before saving** switches the action to opening ExpLog with the expense filled
+in, to check and save — a tap per expense instead of none. The logic lives in
+`Shared/MessageLogging.swift`, covered by `check-store.sh`. Tested in the
+simulator by running the action by hand; a real SMS arriving can only be tried
+on a phone.
+
 ## Months
 
 The Expenses tab shows one month at a time, opening on the current one, with

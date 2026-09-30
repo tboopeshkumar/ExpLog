@@ -864,6 +864,38 @@ func run() throws {
            formatsNow.map(\.picked).joined(separator: " | "))
     expect(LearnedParsing.parse(nextAlert, in: learn)?.merchant == "Shopnovaufr Di", "…and the newest pick is what's read")
 
+    print("\nLOGGING FROM A SHORTCUT  (a Messages automation, no form)\n")
+
+    // Continues from the learning checks: ShopNova is remembered as
+    // Shopping › Online, and its format is learned.
+    let shortcutAlert = "Debit Card XX5528 linked to account XX660213 was used for AED33.10 on Oct 5 2026 7:45PM at SHOPNOVAUFR DI, AE. Available Balance AED 4122.40"
+    guard case .ready(let shortcutDraft) = MessageLogging.prepare(shortcutAlert, in: learn) else {
+        expect(false, "a card alert is ready to log")
+        exit(1)
+    }
+    expect(shortcutDraft.merchant == "Shopnovaufr Di", "read with the newest learned format", shortcutDraft.merchant)
+    let shortcutSaved = try shortcutDraft.save(in: learn)
+    expect(shortcutSaved.amount == Decimal(string: "33.10") && timeFormatter(shortcutSaved.date) == "2026-10-05 19:45",
+           "saved with its amount, date and time", timeFormatter(shortcutSaved.date))
+    expect(MessageLogging.summary(of: shortcutSaved).contains("33.10"), "a one-line summary for the action's result",
+           MessageLogging.summary(of: shortcutSaved))
+
+    if case .duplicate = MessageLogging.prepare(shortcutAlert, in: learn) {
+        expect(true, "the same alert again is recognised as already logged")
+    } else {
+        expect(false, "the same alert again is recognised as already logged")
+    }
+    if case .notAnExpense = MessageLogging.prepare("Your OTP for transaction of AED 250.00 is 884213. Do not share it.", in: learn) {
+        expect(true, "an OTP is skipped")
+    } else {
+        expect(false, "an OTP is skipped")
+    }
+    if case .ready(let nameless) = MessageLogging.prepare("AED 45.00 debited from card XXXX4417.", in: learn) {
+        expect(nameless.merchant == "Card XXXX4417", "no merchant in the alert: named after the card, so it can still be saved", nameless.merchant)
+    } else {
+        expect(false, "an alert with no merchant is still logged")
+    }
+
     print("")
     if failures == 0 {
         print("All checks passed.\n")

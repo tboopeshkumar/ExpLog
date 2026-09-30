@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var showingImporter = false
     @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
     @State private var importReport: ImportReport?
+    @AppStorage(MessageLogging.reviewKey) private var reviewMessageExpenses = false
 
     var body: some View {
         List {
@@ -57,6 +58,18 @@ struct SettingsView: View {
                 }
             } footer: {
                 Text("\(transactions.count) transaction(s) stored on this device. Import accepts an ExpLog CSV export and skips expenses that are already here.")
+            }
+
+            Section {
+                Toggle(isOn: $reviewMessageExpenses) {
+                    Label("Review before saving", systemImage: "checklist")
+                }
+            } header: {
+                Text("Shortcuts")
+            } footer: {
+                Text(reviewMessageExpenses
+                     ? "The Log Expense from Message action opens ExpLog with the expense filled in, for you to check and save."
+                     : "The Log Expense from Message action saves each card alert straight away, without opening ExpLog. To log alerts as they arrive: in Shortcuts, add an automation for When I Receive a Message where Message contains a phrase your bank's alerts use, turn off Confirm Before Run, and add Log Expense from Message with the trigger's Message as input.")
             }
 
             Section {
