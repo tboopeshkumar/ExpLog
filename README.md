@@ -428,7 +428,7 @@ and the parser recognises about thirty major currencies in alerts
 (`Shared/Currency.swift`).
 
 Your other currencies — any you've spent in, set a rate for or added — are
-listed in Settings → Other currencies & rates. Tap Edit to drag them into
+listed in Settings → Other currencies. Tap Edit to drag them into
 order: the form's currency menu offers the main currency, then yours in that
 order, then the rest below a divider, so a second currency you use often is one
 tap away. Swipe one left to remove it: its current rate is cleared (expenses

@@ -19,7 +19,7 @@ final class CurrencyOrderUITests: XCTestCase {
         app.launch()
     }
 
-    /// Codes of the rows in Settings → Other currencies & rates, top to bottom.
+    /// Codes of the rows in Settings → Other currencies, top to bottom.
     private func listedCodes() -> [String] {
         app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH 'currency-'"))
@@ -49,7 +49,7 @@ final class CurrencyOrderUITests: XCTestCase {
         launch(order: order.joined(separator: ","))
 
         app.tabBars.buttons["Settings"].tap()
-        app.buttons["Other currencies & rates"].firstMatch.tap()
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Other currencies'")).firstMatch.tap()
         XCTAssertTrue(app.navigationBars["Currencies"].waitForExistence(timeout: 5))
         XCTAssertEqual(Array(listedCodes().prefix(order.count)), order, "Settings lists them in the saved order")
         XCTAssertTrue(app.buttons["Edit"].exists, "Edit, to drag them")

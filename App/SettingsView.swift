@@ -5,13 +5,28 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Query private var transactions: [Transaction]
+    @Query(filter: #Predicate<Account> { !$0.isArchived }) private var accounts: [Account]
+    @Query(filter: #Predicate<ExpenseCategory> { !$0.isArchived }) private var categories: [ExpenseCategory]
+    @Query private var merchants: [MerchantAlias]
+    @Query private var formats: [MessageFormat]
 
     @State private var exportURL: URL?
     @State private var exportError: String?
     @State private var showingImporter = false
     @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
+    @AppStorage(Currency.exchangeRatesKey, store: Currency.defaults) private var ratesJSON = ""
+    @AppStorage(Currency.orderKey, store: Currency.defaults) private var currencyOrder = ""
+    @AppStorage(Currency.hiddenKey, store: Currency.defaults) private var hiddenCurrencies = ""
     @State private var importReport: ImportReport?
     @AppStorage(MessageLogging.reviewKey) private var reviewMessageExpenses = false
+
+    /// "INR, USD": the other currencies, as listed on their page.
+    private var otherCurrencies: String {
+        Currency.yours(order: currencyOrder, main: mainCurrency,
+                       rates: ExchangeRates(main: mainCurrency, json: ratesJSON),
+                       alsoUsed: Set(transactions.map(\.currencyCode)), hidden: hiddenCurrencies)
+            .joined(separator: ", ")
+    }
 
     var body: some View {
         List {
@@ -20,55 +35,36 @@ struct SettingsView: View {
                 NavigationLink {
                     MainCurrencyPicker(selection: $mainCurrency)
                 } label: {
-                    LabeledContent {
-                        Text(mainCurrency)
-                    } label: {
-                        Label("Main currency", systemImage: "banknote")
-                    }
+                    SettingsRow("Main currency", symbol: "banknote", color: .green, value: mainCurrency)
                 }
-
                 NavigationLink { ExchangeRatesView() } label: {
-                    Label("Other currencies & rates", systemImage: "arrow.left.arrow.right")
+                    SettingsRow("Other currencies", symbol: "arrow.left.arrow.right", color: .teal,
+                                value: otherCurrencies.isEmpty ? nil : otherCurrencies)
                 }
+            } header: {
+                Text("Currency")
             } footer: {
                 Text("Totals are in \(mainCurrency). Other currencies count at the rate each expense was logged with.")
             }
 
-            Section {
+            Section("Organise") {
                 NavigationLink { AccountsView() } label: {
-                    Label("Cards & accounts", systemImage: "creditcard")
+                    SettingsRow("Cards & accounts", symbol: "creditcard.fill", color: .blue, value: count(accounts.count))
                 }
                 NavigationLink { CategoriesView() } label: {
-                    Label("Categories", systemImage: "tag")
+                    SettingsRow("Categories", symbol: "tag.fill", color: .orange, value: count(categories.count))
                 }
-            }
-
-            Section {
-                Button {
-                    export()
-                } label: {
-                    Label("Export CSV", systemImage: "square.and.arrow.up")
-                }
-                .disabled(transactions.isEmpty)
-
-                Button {
-                    showingImporter = true
-                } label: {
-                    Label("Import CSV", systemImage: "square.and.arrow.down")
-                }
-            } footer: {
-                Text("\(transactions.count == 1 ? "1 expense" : "\(transactions.count) expenses") on this device. Import skips ones already here.")
             }
 
             Section {
                 NavigationLink { ShortcutSetupView() } label: {
-                    Label("Set up automatic logging", systemImage: "wand.and.sparkles")
+                    SettingsRow("Set up automatic logging", symbol: "wand.and.sparkles", color: .indigo)
                 }
                 Toggle(isOn: $reviewMessageExpenses) {
-                    Label("Review before saving", systemImage: "checklist")
+                    SettingsRow("Review before saving", symbol: "checklist", color: .purple)
                 }
             } header: {
-                Text("Shortcuts")
+                Text("Logging from Messages")
             } footer: {
                 Text(reviewMessageExpenses
                      ? "ExpLog opens so you can check each alert before saving."
@@ -77,18 +73,46 @@ struct SettingsView: View {
 
             Section {
                 NavigationLink { MerchantsView() } label: {
-                    Label("Merchants", systemImage: "storefront")
+                    SettingsRow("Merchants", symbol: "storefront.fill", color: .pink, value: count(merchants.count))
                 }
                 NavigationLink { MessageFormatsView() } label: {
-                    Label("Message formats", systemImage: "text.viewfinder")
+                    SettingsRow("Message formats", symbol: "text.viewfinder", color: .cyan, value: count(formats.count))
                 }
                 NavigationLink { ParserTesterView() } label: {
-                    Label("Test message parsing", systemImage: "text.magnifyingglass")
+                    SettingsRow("Test message parsing", symbol: "text.magnifyingglass", color: .gray)
                 }
             } header: {
-                Text("Learned from messages")
+                Text("Learned")
             } footer: {
                 Text("What ExpLog has learned from the expenses you've saved.")
+            }
+
+            Section {
+                Button {
+                    export()
+                } label: {
+                    SettingsRow("Export CSV", symbol: "square.and.arrow.up", color: .blue)
+                }
+                .disabled(transactions.isEmpty)
+                // Plain text like the other rows, not link blue.
+                .tint(.primary)
+
+                Button {
+                    showingImporter = true
+                } label: {
+                    SettingsRow("Import CSV", symbol: "square.and.arrow.down", color: .blue)
+                }
+                .tint(.primary)
+            } header: {
+                Text("Data")
+            } footer: {
+                Text("\(transactions.count == 1 ? "1 expense" : "\(transactions.count) expenses") on this device. Import skips ones already here.")
+            }
+
+            Section {
+                LabeledContent("Version", value: Self.version)
+            } footer: {
+                Text("Your expenses stay on this device; nothing is sent anywhere.")
             }
         }
         .navigationTitle("Settings")
@@ -179,6 +203,59 @@ private struct ImportReport {
             lines.append("Couldn't read \(result.rejected.count): \(shown.joined(separator: "; "))\(more).")
         }
         message = lines.joined(separator: "\n\n")
+    }
+}
+
+extension SettingsView {
+    /// A count for a row's value, or nothing for none.
+    fileprivate func count(_ n: Int) -> String? { n == 0 ? nil : "\(n)" }
+
+    /// "1.0 (12)"
+    fileprivate static var version: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "–"
+        let build = info?["CFBundleVersion"] as? String ?? "–"
+        return "\(version) (\(build))"
+    }
+}
+
+/// A Settings row: a symbol on a filled tile of its colour, as iOS Settings
+/// draws them, the title, and a value in secondary text.
+private struct SettingsRow: View {
+    let title: String
+    let symbol: String
+    let color: Color
+    var value: String?
+
+    /// A disabled button's row is dimmed by hand: the colours here are set
+    /// explicitly, so the usual greying doesn't reach them.
+    @Environment(\.isEnabled) private var isEnabled
+
+    init(_ title: String, symbol: String, color: Color, value: String? = nil) {
+        self.title = title
+        self.symbol = symbol
+        self.color = color
+        self.value = value
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(color.gradient, in: .rect(cornerRadius: 8))
+                .accessibilityHidden(true)
+            Text(title)
+                .foregroundStyle(.primary)
+            if let value {
+                Spacer(minLength: 8)
+                Text(value)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .opacity(isEnabled ? 1 : 0.4)
     }
 }
 
