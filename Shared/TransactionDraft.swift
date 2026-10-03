@@ -54,6 +54,9 @@ public final class TransactionDraft {
     /// The transaction being edited, when editing rather than creating.
     private var existing: Transaction?
 
+    /// Editing a saved expense, rather than making a new one.
+    public var isEditing: Bool { existing != nil }
+
     public init() {}
 
     public init(editing transaction: Transaction) {

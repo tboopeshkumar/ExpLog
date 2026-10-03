@@ -403,7 +403,7 @@ private struct MonthExpensesView: View {
                     onSave: { editing = nil },
                     onCancel: { editing = nil }
                 )
-                .navigationTitle("Expense")
+                .navigationTitle(draft.isEditing ? "Edit Expense" : "New Expense")
                 .navigationBarTitleDisplayMode(.inline)
             }
         }

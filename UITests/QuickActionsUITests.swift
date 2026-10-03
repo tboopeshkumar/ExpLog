@@ -54,10 +54,10 @@ final class QuickActionsUITests: XCTestCase {
         // Copy opens the form, dated today, and saving adds a second one.
         app.staticTexts["Aman Taxi"].firstMatch.swipeRight()
         app.buttons["Copy"].tap()
-        XCTAssertTrue(app.navigationBars["Expense"].waitForExistence(timeout: 5), "the copy opens in the form")
+        XCTAssertTrue(app.navigationBars["New Expense"].waitForExistence(timeout: 5), "the copy opens in the form")
         snapshot("5 copy form")
         // Saved with today's date, so it's under Today in this month.
-        app.navigationBars["Expense"].buttons["Save"].tap()
+        app.navigationBars["New Expense"].buttons["Save"].tap()
         app.buttons["monthTitle"].firstMatch.tap()
         app.buttons["This month"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Today"].waitForExistence(timeout: 5), "the copy is dated today")

@@ -5,7 +5,6 @@ import SwiftData
 /// the two never drift apart.
 public struct TransactionFormView: View {
     @Environment(\.modelContext) private var context
-    @Environment(\.colorScheme) private var colorScheme
 
     @Query(filter: #Predicate<ExpenseCategory> { !$0.isArchived }, sort: \ExpenseCategory.sortOrder)
     private var categories: [ExpenseCategory]
@@ -31,7 +30,12 @@ public struct TransactionFormView: View {
     /// What happened to the last pick, shown under the merchant.
     @State private var pickNote: String?
     @State private var errorMessage: String?
-    @FocusState private var amountFocused: Bool
+    /// Which field has the keyboard: the amount first, then the merchant.
+    private enum Field { case amount, merchant }
+    @FocusState private var focus: Field?
+    /// The amount as typed, so an empty field means "not entered" rather
+    /// than showing a 0 to delete first.
+    @State private var amountText: String
 
     public init(
         draft: TransactionDraft,
@@ -41,6 +45,9 @@ public struct TransactionFormView: View {
         onCancel: @escaping () -> Void
     ) {
         self.draft = draft
+        _amountText = State(initialValue: draft.amount == 0
+            ? ""
+            : draft.amount.formatted(.number.grouping(.never).precision(.fractionLength(0...3))))
         self.showsCategoryAndAccount = showsCategoryAndAccount
         self.saveAction = saveAction
         self.onSave = onSave
@@ -51,6 +58,11 @@ public struct TransactionFormView: View {
         Form {
             amountSection
             detailSection
+            if showsCategoryAndAccount, !categories.isEmpty {
+                Section("Category") {
+                    CategoryChips(categories: categories, category: $draft.category, subcategory: $draft.subcategory)
+                }
+            }
             // Not offered for a card too short to be a safe keyword (a bare
             // "ending 453"); that one's set up in Settings with more context.
             if showsCategoryAndAccount, draft.account == nil,
@@ -69,6 +81,29 @@ public struct TransactionFormView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save", action: save).disabled(!draft.isValid)
             }
+            // The number pad has no return key: this is the way on.
+            ToolbarItemGroup(placement: .keyboard) {
+                if focus == .amount {
+                    Spacer()
+                    Button("Next") { focus = .merchant }
+                        .fontWeight(.semibold)
+                }
+            }
+        }
+        .onChange(of: amountText) { _, text in
+            let clean = Self.sanitized(text, minorUnits: Currency.minorUnits(of: draft.currencyCode))
+            if clean != text {
+                amountText = clean   // comes back round with the clean text
+                return
+            }
+            draft.amount = Self.decimal(from: clean) ?? 0
+        }
+        .task {
+            // A blank expense starts at the amount; one from a message or an
+            // edit already has it, so the keyboard would only get in the way.
+            guard draft.amount == 0, draft.rawMessage == nil else { return }
+            try? await Task.sleep(for: .milliseconds(450))
+            focus = .amount
         }
         .alert("Couldn't save", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
@@ -81,34 +116,20 @@ public struct TransactionFormView: View {
 
     private var amountSection: some View {
         Section {
-            HStack {
-                // Tap the sign to log an expense in another currency.
-                Menu {
-                    // Yours first — main, then the order set in Settings —
-                    // divided from the rest.
-                    let yours = [Currency.main] + Currency.yours
-                    Picker("Currency", selection: $draft.currencyCode) {
-                        Section {
-                            ForEach(yours, id: \.self) { code in
-                                Text("\(code) · \(Currency.name(for: code))").tag(code)
-                            }
-                        }
-                        Section {
-                            ForEach(Currency.supported.filter { !yours.contains($0) }, id: \.self) { code in
-                                Text("\(code) · \(Currency.name(for: code))").tag(code)
-                            }
-                        }
-                    }
-                } label: {
-                    Formatting.currencySign(for: draft.currencyCode)
-                        .foregroundStyle(.tint)
-                        .accessibilityLabel("Currency: \(Currency.name(for: draft.currencyCode))")
-                }
-                TextField("0.00", value: $draft.amount, format: .number.precision(.fractionLength(0...2)))
+            VStack(spacing: 6) {
+                currencyMenu
+                TextField("0.00", text: $amountText)
                     .keyboardType(.decimalPad)
-                    .font(.system(size: 34, weight: .semibold, design: .rounded))
-                    .focused($amountFocused)
+                    .multilineTextAlignment(.center)
+                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.5)
+                    .focused($focus, equals: .amount)
+                    .accessibilityLabel("Amount")
+                    .accessibilityIdentifier("amount")
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
 
             // Another currency: the rate this expense counts at. Starts from
             // Settings and stays with the expense once saved, so a later rate
@@ -147,12 +168,88 @@ public struct TransactionFormView: View {
         }
     }
 
+    /// The currency as a pill above the amount; tap for the others — the
+    /// main one and those arranged in Settings first.
+    private var currencyMenu: some View {
+        Menu {
+            let yours = [Currency.main] + Currency.yours
+            Picker("Currency", selection: $draft.currencyCode) {
+                Section {
+                    ForEach(yours, id: \.self) { code in
+                        Text("\(code) · \(Currency.name(for: code))").tag(code)
+                    }
+                }
+                Section {
+                    ForEach(Currency.supported.filter { !yours.contains($0) }, id: \.self) { code in
+                        Text("\(code) · \(Currency.name(for: code))").tag(code)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Formatting.currencySign(for: draft.currencyCode)
+                Text(draft.currencyCode)
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.bold))
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.tint)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.tint.opacity(0.12), in: .capsule)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Currency: \(Currency.name(for: draft.currencyCode))")
+    }
+
+    /// Keeps what can be part of an amount: digits and one decimal mark,
+    /// with no more decimals than the currency has — so a stray second "."
+    /// or a third decimal on dirhams goes nowhere.
+    static func sanitized(_ text: String, minorUnits: Int) -> String {
+        let mark = Character(Locale.current.decimalSeparator ?? ".")
+        var result = ""
+        var seenMark = false
+        var decimals = 0
+        for character in text {
+            if character.isASCII, character.isNumber {
+                if seenMark {
+                    guard decimals < minorUnits else { continue }
+                    decimals += 1
+                }
+                result.append(character)
+            } else if (character == mark || character == "."), !seenMark, minorUnits > 0 {
+                seenMark = true
+                result.append(character)
+            }
+        }
+        return result
+    }
+
+    /// Reads what was typed with either decimal mark: the keypad gives this
+    /// region's, and "." is accepted everywhere.
+    static func decimal(from text: String) -> Decimal? {
+        let mark = Locale.current.decimalSeparator ?? "."
+        let grouping = Locale.current.groupingSeparator ?? ","
+        var cleaned = text.trimmingCharacters(in: .whitespaces)
+        if mark != "." {
+            cleaned = cleaned.replacingOccurrences(of: ".", with: mark)
+        }
+        if grouping != mark {
+            cleaned = cleaned.replacingOccurrences(of: grouping, with: "")
+        }
+        cleaned = cleaned.replacingOccurrences(of: mark, with: ".")
+        guard let value = Decimal(string: cleaned, locale: Locale(identifier: "en_US_POSIX")), value >= 0 else { return nil }
+        return value
+    }
+
     @ViewBuilder
     private var detailSection: some View {
         Section {
             HStack {
                 TextField("Merchant", text: $draft.merchant)
                     .textInputAutocapitalization(.words)
+                    .focused($focus, equals: .merchant)
+                    .submitLabel(.done)
                 // Misread? Pick the merchant's words out of the message.
                 if let raw = draft.rawMessage, !raw.isEmpty {
                     Button("Pick merchant from message", systemImage: "text.viewfinder") {
@@ -177,36 +274,6 @@ public struct TransactionFormView: View {
             }
 
             DatePicker("Date", selection: $draft.date)
-
-            if showsCategoryAndAccount {
-                Picker("Category", selection: $draft.category) {
-                    Text("None").tag(ExpenseCategory?.none)
-                    ForEach(categories) { category in
-                        // menuIcon, not systemImage: a plain symbol would be
-                        // redrawn in one colour by the menu.
-                        Label { Text(category.name) } icon: { category.menuIcon(for: colorScheme) }
-                            .tag(ExpenseCategory?.some(category))
-                    }
-                }
-
-                // Only when the chosen category has any: most won't.
-                if let subcategories = draft.category?.sortedSubcategories, !subcategories.isEmpty {
-                    Picker("Subcategory", selection: $draft.subcategory) {
-                        Text("None").tag(ExpenseSubcategory?.none)
-                        ForEach(subcategories) { subcategory in
-                            Text(subcategory.name).tag(ExpenseSubcategory?.some(subcategory))
-                        }
-                    }
-                }
-
-                Picker("Account", selection: $draft.account) {
-                    Text("None").tag(Account?.none)
-                    ForEach(accounts) { account in
-                        Text(account.name)
-                            .tag(Account?.some(account))
-                    }
-                }
-            }
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
                 if let pickNote {
@@ -231,9 +298,19 @@ public struct TransactionFormView: View {
         }
     }
 
+    /// The card it was paid with, and a note.
     private var noteSection: some View {
-        Section("Note") {
-            TextField("Optional", text: $draft.note, axis: .vertical)
+        Section {
+            if showsCategoryAndAccount {
+                Picker("Account", selection: $draft.account) {
+                    Text("None").tag(Account?.none)
+                    ForEach(accounts) { account in
+                        Text(account.name)
+                            .tag(Account?.some(account))
+                    }
+                }
+            }
+            TextField("Add a note", text: $draft.note, axis: .vertical)
                 .lineLimit(1...4)
         }
     }

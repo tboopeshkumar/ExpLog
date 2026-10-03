@@ -326,6 +326,17 @@ a synthetic export.
 AirDrop the CSV to the phone and import it. Keep both files out of this
 repository: they're real spending.
 
+## The form
+
+A new expense opens on the amount, keyboard up; Next moves on to the merchant.
+The amount field takes digits and one decimal mark, and no more decimals than
+the currency has (two for dirhams, three for dinars, none for yen). The
+currency is the pill above it — your currencies first, as arranged in
+Settings. Categories are a row of coloured chips, one tap to choose and
+another to clear; a category with subcategories shows them as a second row.
+The same form backs the share extension and editing ("Edit Expense").
+`ExpenseFormUITests` drives it.
+
 ## Quick actions
 
 Swipe an expense right for **Categorise** — a half-height sheet of categories
