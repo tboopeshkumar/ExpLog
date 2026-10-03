@@ -24,7 +24,7 @@ struct MerchantsView: View {
                 ContentUnavailableView(
                     "No merchants yet",
                     systemImage: "storefront",
-                    description: Text("Save an expense from a message with a category, and ExpLog remembers that merchant's name and category for next time.")
+                    description: Text("Categorise an expense from a message and its merchant is remembered.")
                 )
             } else {
                 Section {
@@ -42,7 +42,7 @@ struct MerchantsView: View {
                         try? context.save()
                     }
                 } footer: {
-                    Text("Messages from these merchants arrive named and categorised as shown. Tap one to change it; swipe to forget it.")
+                    Text("Tap to rename or recategorise. Swipe to forget.")
                 }
             }
         }
@@ -126,7 +126,7 @@ private struct MerchantEditor: View {
                         }
                     }
                 } footer: {
-                    Text("Used for this merchant's messages from now on. Expenses already logged keep theirs.")
+                    Text("Applies to future messages only.")
                 }
             }
             .navigationTitle(MerchantsView.name(of: alias))
@@ -171,7 +171,7 @@ struct MessageFormatsView: View {
                 ContentUnavailableView {
                     Label("No message formats", systemImage: "text.viewfinder")
                 } description: {
-                    Text("When a merchant is misread, tap \(Image(systemName: "text.viewfinder")) beside Merchant and pick its words from the message. ExpLog then knows where to look in that bank's messages.")
+                    Text("Merchant misread? Tap \(Image(systemName: "text.viewfinder")) beside Merchant and pick it from the message.")
                 }
             } else {
                 Section {
@@ -190,7 +190,7 @@ struct MessageFormatsView: View {
                         try? context.save()
                     }
                 } footer: {
-                    Text("Messages shaped like these have their merchant read from the highlighted place. Swipe to forget one; to correct one, pick the merchant again from a message.")
+                    Text("The merchant is read from the highlighted words. Swipe to forget.")
                 }
             }
         }
@@ -204,5 +204,44 @@ struct MessageFormatsView: View {
             text[range].foregroundColor = .accentColor
         }
         return text
+    }
+}
+
+/// The steps for a Messages automation that runs Log Expense from Message.
+struct ShortcutSetupView: View {
+    private let steps: [(String, String)] = [
+        ("In Shortcuts, tap Automation, then +.", "plus.circle"),
+        ("Choose When I Receive a Message.", "message"),
+        ("Set Message contains to a phrase all your bank's alerts use, like “was used for”.", "text.quote"),
+        ("Turn off Confirm Before Run.", "bolt"),
+        ("Add Log Expense from Message, and set its Message to the trigger's Message.", "checkmark.seal"),
+    ]
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                    Label {
+                        Text(step.0)
+                    } icon: {
+                        Text("\(index + 1)")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.white)
+                            .frame(width: 26, height: 26)
+                            .background(.tint, in: .circle)
+                    }
+                }
+            } footer: {
+                Text("Make one automation per bank if their wording differs.")
+            }
+
+            Section {
+                Link(destination: URL(string: "shortcuts://")!) {
+                    Label("Open Shortcuts", systemImage: "arrow.up.forward.app")
+                }
+            }
+        }
+        .navigationTitle("Automatic logging")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

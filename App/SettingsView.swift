@@ -31,7 +31,7 @@ struct SettingsView: View {
                     Label("Other currencies & rates", systemImage: "arrow.left.arrow.right")
                 }
             } footer: {
-                Text("New expenses start in \(mainCurrency), and totals are counted in it. Other currencies count at the rate each expense was logged with.")
+                Text("Totals are in \(mainCurrency). Other currencies count at the rate each expense was logged with.")
             }
 
             Section {
@@ -57,10 +57,13 @@ struct SettingsView: View {
                     Label("Import CSV", systemImage: "square.and.arrow.down")
                 }
             } footer: {
-                Text("\(transactions.count) transaction(s) stored on this device. Import accepts an ExpLog CSV export and skips expenses that are already here.")
+                Text("\(transactions.count == 1 ? "1 expense" : "\(transactions.count) expenses") on this device. Import skips ones already here.")
             }
 
             Section {
+                NavigationLink { ShortcutSetupView() } label: {
+                    Label("Set up automatic logging", systemImage: "wand.and.sparkles")
+                }
                 Toggle(isOn: $reviewMessageExpenses) {
                     Label("Review before saving", systemImage: "checklist")
                 }
@@ -68,8 +71,8 @@ struct SettingsView: View {
                 Text("Shortcuts")
             } footer: {
                 Text(reviewMessageExpenses
-                     ? "The Log Expense from Message action opens ExpLog with the expense filled in, for you to check and save."
-                     : "The Log Expense from Message action saves each card alert straight away, without opening ExpLog. To log alerts as they arrive: in Shortcuts, add an automation for When I Receive a Message where Message contains a phrase your bank's alerts use, turn off Confirm Before Run, and add Log Expense from Message with the trigger's Message as input.")
+                     ? "ExpLog opens so you can check each alert before saving."
+                     : "Alerts are saved straight away.")
             }
 
             Section {
@@ -85,7 +88,7 @@ struct SettingsView: View {
             } header: {
                 Text("Learned from messages")
             } footer: {
-                Text("The names and categories remembered for merchants, and where to find the merchant in each bank's messages. Paste a bank SMS into the tester to see exactly what ExpLog reads from it.")
+                Text("What ExpLog has learned from the expenses you've saved.")
             }
         }
         .navigationTitle("Settings")
@@ -276,7 +279,7 @@ struct ExchangeRatesView: View {
             } header: {
                 Text("Rates from \(mainCurrency)")
             } footer: {
-                Text("When you log an expense, these are offered right after \(mainCurrency), in this order; tap Edit to drag them. New expenses in a currency take its rate here and keep it: changing a rate, or removing a currency, doesn't change expenses already logged. You can also adjust the rate on a single expense.")
+                Text("Offered first when logging, in this order. Rate changes apply to new expenses only.")
             }
 
             let addable = Currency.pickerOrder.filter { $0 != mainCurrency && !listed.contains($0) }
@@ -421,7 +424,7 @@ struct AccountsView: View {
             } header: {
                 Text("Cards")
             } footer: {
-                Text("An SMS containing one of a card's keywords is matched to that card. Tap a card to edit its keywords.")
+                Text("An SMS containing a card's keyword is matched to that card.")
             }
         }
         .navigationTitle("Cards & accounts")
@@ -468,13 +471,13 @@ private struct KeywordFooter: View {
 
     var body: some View {
         if !tooShort.isEmpty {
-            Text("“\(tooShort.joined(separator: "”, “"))” is too short — use at least \(AccountMatching.minimumKeywordLength) characters, with the mask: XXX453, not 453.")
+            Text("“\(tooShort.joined(separator: "”, “"))” is too short. Include the mask: XXX453.")
                 .foregroundStyle(.orange)
         } else if let clash, isNew {
-            Text("“\(clash.keyword)” is already on “\(clash.account.name)”. Tap it below to edit instead.")
+            Text("“\(clash.keyword)” is already on “\(clash.account.name)”.")
                 .foregroundStyle(.orange)
         } else {
-            Text("Text from this card's SMS, as the bank writes it: XXX4453, XXXX4453. Separate several with commas. Leave empty for cash or accounts without SMS.")
+            Text("As the bank writes it, like XXX4453. Separate several with commas.")
         }
     }
 }
@@ -703,9 +706,9 @@ private struct SubcategoriesView: View {
                 }
             } footer: {
                 if subcategories.isEmpty {
-                    Text("Optional. Subcategories split a category further — Transport › Taxi — and appear in the form once the category is chosen.")
+                    Text("Optional, like Transport › Taxi.")
                 } else {
-                    Text("Deleting a subcategory keeps its expenses in “\(category.name)”.")
+                    Text("Deleting one keeps its expenses in “\(category.name)”.")
                 }
             }
         }
