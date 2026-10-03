@@ -271,6 +271,8 @@ struct TransactionRow: View {
     let transaction: Transaction
     /// Off under a day heading, which already says the date.
     var showsDate = true
+    /// Off on a category's own page: only a subcategory is worth saying.
+    var showsCategory = true
 
     @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
 
@@ -288,14 +290,19 @@ struct TransactionRow: View {
         var parts: [Text] = []
         if showsDate { parts.append(Text(transaction.date.formatted(.dateTime.day().month(.abbreviated)))) }
         if let category = transaction.category {
-            parts.append(Text(transaction.subcategory?.name ?? category.name))
-        } else {
+            if let subcategory = transaction.subcategory {
+                parts.append(Text(subcategory.name))
+            } else if showsCategory {
+                parts.append(Text(category.name))
+            }
+        } else if showsCategory {
             parts.append(Text("Uncategorised").foregroundStyle(.orange))
         }
         if let account = transaction.account {
             parts.append(Text(account.name))
         }
-        return parts.dropFirst().reduce(parts[0]) { $0 + Text(" · ") + $1 }
+        guard let first = parts.first else { return Text("") }
+        return parts.dropFirst().reduce(first) { $0 + Text(" · ") + $1 }
     }
 
     var body: some View {

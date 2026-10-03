@@ -388,7 +388,14 @@ for their quick actions.
 
 The Summary tab shows one month's total and its spending by category or by
 merchant (a switch it remembers), ranked, with each row's share as a bar.
-Tapping a category opens its month: a breakdown by subcategory and by merchant
+Under the total: the spending per day, and a comparison with the month before
+("↑ 18% vs August"). For the current month both count only expenses dated up
+to today — an instalment due later doesn't inflate the pace — and the
+comparison is with the same days of last month ("vs 1–3 Sep"), so an early
+month isn't set against a whole one. Rules in `MonthPace`
+(`Shared/MonthSummary.swift`), covered by `check-store.sh`.
+Tapping a category opens its month — its total and share of the month, then a
+breakdown by subcategory and by merchant
 (top five, then "Show all"), then the expenses. Tapping a merchant lists its
 expenses. Merchant names group ignoring case and extra spaces, shown under the
 most common spelling; different names stay separate rather than being merged

@@ -29,8 +29,13 @@ struct SummaryView: View {
         let summary = summary
         List {
             Section {
-                MonthSwitcher(month: $month)
-                headline(summary)
+                VStack(spacing: 14) {
+                    MonthSwitcher(month: $month)
+                    if !summary.isEmpty {
+                        headline(summary)
+                    }
+                }
+                .padding(.vertical, 4)
             }
 
             if summary.isEmpty {
@@ -92,24 +97,81 @@ struct SummaryView: View {
 
 
     private func headline(_ summary: MonthSummary) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(spacing: 6) {
             // The one hero figure on the screen.
             Formatting.moneyText(summary.total, code: summary.currencyCode)
-                .font(.system(size: 48, weight: .semibold, design: .rounded))
-                .minimumScaleFactor(0.5)
+                .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                .monospacedDigit()
+                .minimumScaleFactor(0.6)
                 .lineLimit(1)
-            Text(summary.count == 1 ? "1 expense" : "\(summary.count) expenses")
+            countLine(summary)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
             // Only expenses logged without a rate: they can't be counted in
             // the total, so they're shown beside it.
             if !summary.otherCurrencies.isEmpty {
                 (Text("Plus ") + Formatting.totalsText(summary.otherCurrencies)
                     + Text(" with no exchange rate"))
-                    .font(.subheadline)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            comparison(summary)
+                .padding(.top, 4)
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Spending to date: the month up to today, so instalments dated later
+    /// in it don't count towards the pace. nil for a future month.
+    private var spentSoFar: Decimal? {
+        guard let range = MonthPace.countedRange(for: month) else { return nil }
+        return Currency.mainTotal(of: transactions.filter { range.contains($0.date) }, main: mainCurrency).total
+    }
+
+    /// "23 expenses · Ð 70.17 a day"
+    private func countLine(_ summary: MonthSummary) -> Text {
+        let count = Text(summary.count == 1 ? "1 expense" : "\(summary.count) expenses")
+        guard let spent = spentSoFar, spent > 0,
+              let perDay = MonthPace.dailyAverage(of: spent, in: month) else { return count }
+        return count + Text(" · ") + Formatting.moneyText(perDay, code: summary.currencyCode) + Text(" a day")
+    }
+
+    /// "↑ 18% vs August", or for this month "↓ 6% vs 1–3 Sep": the same days
+    /// of the month before, so an early month isn't set against a whole one.
+    @ViewBuilder
+    private func comparison(_ summary: MonthSummary) -> some View {
+        if let range = MonthPace.comparisonRange(for: month), let spent = spentSoFar {
+            let before = Currency.mainTotal(of: transactions.filter { range.contains($0.date) }, main: mainCurrency).total
+            if let change = MonthPace.change(from: before, to: spent) {
+                let label = Self.comparisonLabel(range, wholeMonth: range == Formatting.monthRange(containing: range.lowerBound))
+                let same = abs(change) < 0.005
+                HStack(spacing: 4) {
+                    if !same {
+                        Image(systemName: change > 0 ? "arrow.up.right" : "arrow.down.right")
+                    }
+                    Text(same ? "Same as \(label)" : "\(abs(change), format: .percent.precision(.fractionLength(0))) vs \(label)")
+                }
+                .font(.footnote.weight(.medium))
+                .monospacedDigit()
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                // More spent is the one to notice; less is good news.
+                .foregroundStyle(same ? Color.secondary : change > 0 ? Color.orange : Color.green)
+                .background((same ? Color.secondary : change > 0 ? Color.orange : Color.green).opacity(0.15), in: .capsule)
+                .accessibilityLabel(same ? "Same as \(label)"
+                                    : "\(abs(change), format: .percent.precision(.fractionLength(0))) \(change > 0 ? "more" : "less") than \(label)")
+            }
+        }
+    }
+
+    /// "August", or "1–3 Aug" for part of it.
+    private static func comparisonLabel(_ range: Range<Date>, wholeMonth: Bool) -> String {
+        if wholeMonth { return range.lowerBound.formatted(.dateTime.month(.wide)) }
+        let last = Calendar.current.date(byAdding: .day, value: -1, to: range.upperBound) ?? range.lowerBound
+        let month = range.lowerBound.formatted(.dateTime.month(.abbreviated))
+        let first = Calendar.current.component(.day, from: range.lowerBound)
+        let end = Calendar.current.component(.day, from: last)
+        return first == end ? "\(first) \(month)" : "\(first)–\(end) \(month)"
     }
 
     /// This month's merchants, main currency only.
@@ -141,6 +203,7 @@ private struct ShareRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(title)
+                        .font(.body.weight(.medium))
                         .lineLimit(1)
                     // Once is the default; only repeat visits are worth a mark.
                     if let count, count > 1 {
@@ -153,6 +216,7 @@ private struct ShareRow: View {
                     Spacer(minLength: 8)
                     // Tabular digits so amounts align down the column.
                     Formatting.moneyText(amount, code: currencyCode)
+                        .font(.body.weight(.semibold))
                         .monospacedDigit()
                 }
                 HStack(spacing: 8) {
@@ -245,7 +309,26 @@ private struct MonthExpensesView: View {
         // One merchant would be a row saying "100%".
         let showsMerchants = isCategory && merchants.rows.count > 1
 
+        let monthTotal = MonthSummary(month: month, transactions: transactions, mainCurrency: mainCurrency).total
+        let total = Currency.mainTotal(of: matching, main: mainCurrency)
+
         List {
+            if !matching.isEmpty {
+                Section {
+                    VStack(spacing: 4) {
+                        Formatting.totalsText([Currency.Total(code: mainCurrency, amount: total.total, count: 0)] + total.unconverted)
+                            .font(.system(.title, design: .rounded, weight: .bold))
+                            .monospacedDigit()
+                            .minimumScaleFactor(0.6)
+                            .lineLimit(1)
+                        shareLine(count: matching.count, amount: total.total, of: monthTotal)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                }
+            }
             if showsSubcategories {
                 Section("By subcategory") {
                     ForEach(subcategories.rows) { row in
@@ -288,7 +371,8 @@ private struct MonthExpensesView: View {
                     Button {
                         editing = TransactionDraft(editing: transaction)
                     } label: {
-                        TransactionRow(transaction: transaction)
+                        // The page is already the category: say only what's more specific.
+                        TransactionRow(transaction: transaction, showsCategory: !isCategory)
                     }
                     .buttonStyle(.plain)
                     .expenseActions(
@@ -300,6 +384,7 @@ private struct MonthExpensesView: View {
                 }
             }
         }
+        .listSectionSpacing(.compact)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .overlay {
@@ -322,6 +407,16 @@ private struct MonthExpensesView: View {
                 .navigationBarTitleDisplayMode(.inline)
             }
         }
+    }
+}
+
+extension MonthExpensesView {
+    /// "8 expenses · 47% of September"
+    fileprivate func shareLine(count: Int, amount: Decimal, of monthTotal: Decimal) -> Text {
+        let expenses = Text(count == 1 ? "1 expense" : "\(count) expenses")
+        guard monthTotal > 0 else { return expenses }
+        let share = NSDecimalNumber(decimal: amount / monthTotal).doubleValue
+        return expenses + Text(" · \(share, format: .percent.precision(.fractionLength(0))) of \(month.formatted(.dateTime.month(.wide)))")
     }
 }
 

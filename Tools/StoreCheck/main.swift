@@ -896,6 +896,35 @@ func run() throws {
         expect(false, "an alert with no merchant is still logged")
     }
 
+    print("\nMONTH PACE  (per day, and against the month before)\n")
+
+    let paceNow = day(9, 20)
+    let paceSeptember = Formatting.monthStart(day(9, 1), calendar: calendar)
+    let paceAugust = Formatting.monthStart(day(8, 1), calendar: calendar)
+    let paceOctober = Formatting.monthStart(day(10, 1), calendar: calendar)
+    expect(MonthPace.daysCounted(in: paceSeptember, now: paceNow, calendar: calendar) == 20, "the current month counts the days so far")
+    expect(MonthPace.daysCounted(in: paceAugust, now: paceNow, calendar: calendar) == 31, "a past month counts all its days")
+    expect(MonthPace.daysCounted(in: paceOctober, now: paceNow, calendar: calendar) == nil, "a future month has no pace")
+    expect(MonthPace.dailyAverage(of: 400, in: paceSeptember, now: paceNow, calendar: calendar) == 20, "AED 400 over 20 days is 20 a day")
+
+    let sameDays = MonthPace.comparisonRange(for: paceSeptember, now: paceNow, calendar: calendar)
+    expect(sameDays?.lowerBound == paceAugust && sameDays?.upperBound == calendar.date(byAdding: .day, value: 20, to: paceAugust),
+           "the current month is compared with the same days of the last one")
+    let wholeMonth = MonthPace.comparisonRange(for: paceAugust, now: paceNow, calendar: calendar)
+    expect(wholeMonth == Formatting.monthRange(containing: day(7, 1), calendar: calendar),
+           "a past month is compared with all of the one before")
+    let lateNow = day(3, 31)
+    let afterFebruary = MonthPace.comparisonRange(for: Formatting.monthStart(lateNow, calendar: calendar), now: lateNow, calendar: calendar)
+    expect(afterFebruary?.upperBound == Formatting.monthRange(containing: day(2, 1), calendar: calendar).upperBound,
+           "on the 31st, a shorter month before is compared whole")
+    let counted = MonthPace.countedRange(for: paceSeptember, now: paceNow, calendar: calendar)
+    expect(counted?.lowerBound == paceSeptember && counted?.upperBound == calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: paceNow)),
+           "the current month's pace runs to the end of today, leaving out future instalments")
+    expect(MonthPace.countedRange(for: paceAugust, now: paceNow, calendar: calendar) == Formatting.monthRange(containing: paceAugust, calendar: calendar),
+           "a past month's pace covers all of it")
+    expect(MonthPace.change(from: 100, to: 118).map { abs($0 - 0.18) < 0.0001 } == true, "18% more")
+    expect(MonthPace.change(from: 0, to: 50) == nil, "nothing last month: no comparison")
+
     print("")
     if failures == 0 {
         print("All checks passed.\n")

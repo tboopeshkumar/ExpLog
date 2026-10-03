@@ -190,3 +190,58 @@ public struct MerchantBreakdown {
         return categorised.max { counts[$0.persistentModelID]! < counts[$1.persistentModelID]! }
     }
 }
+
+// MARK: - Pace
+
+/// How a month's spending compares: per day, and against the month before.
+public enum MonthPace {
+
+    /// Days the month's spending is spread over: those so far in the current
+    /// month, all of them in a past one. nil for a month still to come.
+    public static func daysCounted(in month: Date, now: Date = .now, calendar: Calendar = .current) -> Int? {
+        let range = Formatting.monthRange(containing: month, calendar: calendar)
+        if now < range.lowerBound { return nil }
+        if now >= range.upperBound {
+            return calendar.dateComponents([.day], from: range.lowerBound, to: range.upperBound).day
+        }
+        return calendar.component(.day, from: now)
+    }
+
+    /// The part of the month the pace is measured over: up to the end of
+    /// today in the current month — leaving out future-dated expenses such
+    /// as instalments — and all of a past month. nil for a future month.
+    public static func countedRange(for month: Date, now: Date = .now, calendar: Calendar = .current) -> Range<Date>? {
+        let range = Formatting.monthRange(containing: month, calendar: calendar)
+        guard daysCounted(in: month, now: now, calendar: calendar) != nil else { return nil }
+        let endOfToday = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? range.upperBound
+        return range.lowerBound..<min(range.upperBound, endOfToday)
+    }
+
+    /// `total` spread over the days counted; nil for a future month.
+    public static func dailyAverage(of total: Decimal, in month: Date, now: Date = .now,
+                                    calendar: Calendar = .current) -> Decimal? {
+        guard let days = daysCounted(in: month, now: now, calendar: calendar), days > 0 else { return nil }
+        return total / Decimal(days)
+    }
+
+    /// The stretch of the previous month to compare with: all of it for a
+    /// past month; for the current one, the same number of days — so the 3rd
+    /// is measured against the 1st–3rd, not a whole month. nil for a future
+    /// month.
+    public static func comparisonRange(for month: Date, now: Date = .now,
+                                       calendar: Calendar = .current) -> Range<Date>? {
+        guard let days = daysCounted(in: month, now: now, calendar: calendar),
+              let previousStart = calendar.date(byAdding: .month, value: -1,
+                                                to: Formatting.monthStart(month, calendar: calendar)) else { return nil }
+        let previous = Formatting.monthRange(containing: previousStart, calendar: calendar)
+        let end = calendar.date(byAdding: .day, value: days, to: previous.lowerBound) ?? previous.upperBound
+        return previous.lowerBound..<min(end, previous.upperBound)
+    }
+
+    /// Change from `previous` to `current` as a fraction (0.18 for 18% more);
+    /// nil when there was nothing before to compare with.
+    public static func change(from previous: Decimal, to current: Decimal) -> Double? {
+        guard previous > 0 else { return nil }
+        return NSDecimalNumber(decimal: (current - previous) / previous).doubleValue
+    }
+}
