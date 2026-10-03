@@ -2,7 +2,7 @@ import XCTest
 
 /// Picking a misread merchant out of the original message.
 ///
-/// Expects this month's "Shopnovaufr Di" expense from Tools/seed-demo.sh,
+/// Expects a "Shopnovaufr Di" expense in this month or one of the last three, from Tools/seed-demo.sh,
 /// read from a debit-card alert. Cancels at the end, so it can run again.
 final class MerchantPickerUITests: XCTestCase {
     private let app = XCUIApplication()
@@ -14,7 +14,11 @@ final class MerchantPickerUITests: XCTestCase {
     }
 
     func testPickingTheMerchantFromTheMessage() throws {
+        // The seeded alert may be in an earlier month than today's.
         let row = app.staticTexts["Shopnovaufr Di"].firstMatch
+        for _ in 0..<3 where !row.waitForExistence(timeout: 2) {
+            app.buttons["Previous month"].firstMatch.tap()
+        }
         XCTAssertTrue(row.waitForExistence(timeout: 5), "the seeded expense is listed")
         row.tap()
 

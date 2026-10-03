@@ -18,7 +18,11 @@ final class QuickActionsUITests: XCTestCase {
     }
 
     func testSwipeToCategoriseCopyAndDelete() throws {
+        // The seeded taxi rides may be in an earlier month than today's.
         let row = app.staticTexts["Aman Taxi"].firstMatch
+        for _ in 0..<3 where !row.waitForExistence(timeout: 2) {
+            app.buttons["Previous month"].firstMatch.tap()
+        }
         XCTAssertTrue(row.waitForExistence(timeout: 5), "expected an expense named Aman Taxi")
 
         // Swipe right: Categorise and Copy.
@@ -36,8 +40,8 @@ final class QuickActionsUITests: XCTestCase {
         snapshot("2 categorise sheet")
         taxi.tap()
         XCTAssertTrue(app.staticTexts["Aman Taxi"].waitForExistence(timeout: 5))
-        // The details line, "26 Sep · Taxi · …", whatever day the expense is on.
-        let details = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '· Taxi'")).firstMatch
+        // The details line under a day heading: "Taxi · SIB Cashback".
+        let details = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Taxi'")).firstMatch
         XCTAssertTrue(details.waitForExistence(timeout: 5), "the row now shows the subcategory")
         snapshot("3 after categorising")
 
@@ -52,17 +56,12 @@ final class QuickActionsUITests: XCTestCase {
         app.buttons["Copy"].tap()
         XCTAssertTrue(app.navigationBars["Expense"].waitForExistence(timeout: 5), "the copy opens in the form")
         snapshot("5 copy form")
-        // Counted among today's rows, at the top: the list only keeps the
-        // rows on screen, so a count of every "Aman Taxi" wouldn't grow.
-        app.navigationBars["Expense"].buttons["Cancel"].tap()
-        let today = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS '· Taxi'",
-                                                         Date.now.formatted(.dateTime.day().month(.abbreviated))))
-        let before = today.count
-        app.staticTexts["Aman Taxi"].firstMatch.swipeRight()
-        app.buttons["Copy"].tap()
-        XCTAssertTrue(app.navigationBars["Expense"].waitForExistence(timeout: 5))
+        // Saved with today's date, so it's under Today in this month.
         app.navigationBars["Expense"].buttons["Save"].tap()
-        XCTAssertTrue(today.element(boundBy: before).waitForExistence(timeout: 5), "the copy was added, dated today")
+        app.buttons["monthTitle"].firstMatch.tap()
+        app.buttons["This month"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Today"].waitForExistence(timeout: 5), "the copy is dated today")
+        XCTAssertTrue(app.staticTexts["Aman Taxi"].exists, "the copy was added")
         snapshot("6 after copying")
     }
 

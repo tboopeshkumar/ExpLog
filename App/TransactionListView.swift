@@ -69,13 +69,14 @@ struct RowActions {
 /// A tappable expense row with its swipe and long-press actions.
 private struct ExpenseRowButton: View {
     let transaction: Transaction
+    var showsDate = true
     let actions: RowActions
 
     var body: some View {
         Button {
             actions.edit(transaction)
         } label: {
-            TransactionRow(transaction: transaction)
+            TransactionRow(transaction: transaction, showsDate: showsDate)
         }
         .buttonStyle(.plain)
         .expenseActions(
@@ -110,20 +111,25 @@ private struct MonthLedger: View {
         )
     }
 
+    /// Only the month's uncategorised expenses, to work through them.
+    @State private var onlyUncategorised = false
+
+    private var uncategorised: Int { items.filter { $0.category == nil }.count }
+
+    private var shown: [Transaction] {
+        onlyUncategorised ? items.filter { $0.category == nil } : items
+    }
+
     var body: some View {
         List {
             Section {
-                MonthSwitcher(month: $month)
-                if !items.isEmpty {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(items.count == 1 ? "1 expense" : "\(items.count) expenses")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Formatting.mainTotalText(of: items, main: mainCurrency)
-                            .font(.headline)
-                            .monospacedDigit()
+                VStack(spacing: 14) {
+                    MonthSwitcher(month: $month)
+                    if !items.isEmpty {
+                        summary
                     }
                 }
+                .padding(.vertical, 4)
             }
 
             if items.isEmpty {
@@ -144,21 +150,71 @@ private struct MonthLedger: View {
                 }
             }
 
-            ForEach(MonthIndex.days(of: items), id: \.day) { day in
+            ForEach(MonthIndex.days(of: shown), id: \.day) { day in
                 Section {
                     ForEach(day.items) { transaction in
-                        ExpenseRowButton(transaction: transaction, actions: actions)
+                        ExpenseRowButton(transaction: transaction, showsDate: false, actions: actions)
                     }
                 } header: {
                     HStack {
-                        Text(day.day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
+                        Text(Self.dayTitle(day.day))
                         Spacer()
                         Formatting.mainTotalText(of: day.items, main: mainCurrency)
                             .monospacedDigit()
                     }
+                    .font(.subheadline.weight(.semibold))
+                    .textCase(nil)
                 }
             }
         }
+        .listSectionSpacing(.compact)
+        .onChange(of: uncategorised) { _, count in
+            // Nothing left to filter for: back to the whole month.
+            if count == 0 { onlyUncategorised = false }
+        }
+    }
+
+    /// The month's total, large, with its count — and, when some are
+    /// uncategorised, a chip that narrows the list to them.
+    private var summary: some View {
+        VStack(spacing: 6) {
+            Formatting.mainTotalText(of: items, main: mainCurrency)
+                .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                .monospacedDigit()
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+            Text(items.count == 1 ? "1 expense" : "\(items.count) expenses")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            if uncategorised > 0 {
+                Button {
+                    withAnimation { onlyUncategorised.toggle() }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: onlyUncategorised ? "xmark.circle.fill" : "tag")
+                        Text(onlyUncategorised ? "Showing \(uncategorised) uncategorised" : "\(uncategorised) uncategorised")
+                    }
+                    .font(.footnote.weight(.medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .foregroundStyle(onlyUncategorised ? Color.white : Color.orange)
+                    .background(onlyUncategorised ? AnyShapeStyle(Color.orange) : AnyShapeStyle(Color.orange.opacity(0.15)),
+                                in: .capsule)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityIdentifier("uncategorisedFilter")
+                .padding(.top, 4)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// "Today", "Yesterday", else "Mon, 28 Sep".
+    static func dayTitle(_ day: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(day) { return "Today" }
+        if calendar.isDateInYesterday(day) { return "Yesterday" }
+        return day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
     }
 }
 
@@ -198,6 +254,8 @@ private struct SearchResults: View {
                         Formatting.mainTotalText(of: month.items, main: mainCurrency)
                             .monospacedDigit()
                     }
+                    .font(.subheadline.weight(.semibold))
+                    .textCase(nil)
                 }
             }
         }
@@ -211,6 +269,8 @@ private struct SearchResults: View {
 
 struct TransactionRow: View {
     let transaction: Transaction
+    /// Off under a day heading, which already says the date.
+    var showsDate = true
 
     @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
 
@@ -221,31 +281,35 @@ struct TransactionRow: View {
         return transaction.amount(in: mainCurrency)
     }
 
-    /// "Sep 26 · Uncategorised · SIB Cashback"
-    private var details: String {
-        var parts = [transaction.date.formatted(.dateTime.day().month(.abbreviated))]
-        if transaction.category == nil {
-            parts.append("Uncategorised")
-        } else if let subcategory = transaction.subcategory {
-            parts.append(subcategory.name)
+    /// "Taxi · SIB Cashback", with the date in front when it isn't shown
+    /// elsewhere. The subcategory, being more specific, stands in for its
+    /// category; "Uncategorised" is in orange, so it's easy to spot.
+    private var detailsText: Text {
+        var parts: [Text] = []
+        if showsDate { parts.append(Text(transaction.date.formatted(.dateTime.day().month(.abbreviated)))) }
+        if let category = transaction.category {
+            parts.append(Text(transaction.subcategory?.name ?? category.name))
+        } else {
+            parts.append(Text("Uncategorised").foregroundStyle(.orange))
         }
         if let account = transaction.account {
-            parts.append(account.name)
+            parts.append(Text(account.name))
         }
-        return parts.joined(separator: " · ")
+        return parts.dropFirst().reduce(parts[0]) { $0 + Text(" · ") + $1 }
     }
 
     var body: some View {
         HStack(spacing: 12) {
             CategoryIcon(transaction.category)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(transaction.merchant.isEmpty ? "Unnamed" : transaction.merchant)
+                    .font(.body.weight(.medium))
                     .lineLimit(1)
                 // One line of text, not separate pieces side by side — those
                 // each wrapped in their own column when space ran out.
                 // Ordered by importance, since the end is what gets cut.
-                Text(details)
+                detailsText
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -255,8 +319,9 @@ struct TransactionRow: View {
             // it with the text, cutting the details short beside empty space.
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .trailing, spacing: 2) {
+            VStack(alignment: .trailing, spacing: 3) {
                 Formatting.moneyText(transaction.amount, code: transaction.currencyCode)
+                    .font(.body.weight(.semibold))
                     .monospacedDigit()
                 if let converted {
                     (Text("≈ ") + Formatting.moneyText(converted, code: mainCurrency))
