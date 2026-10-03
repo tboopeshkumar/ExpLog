@@ -14,6 +14,12 @@ extension ExpenseCategory {
     /// migration.
     public var tint: Color { Color(uiColor: uiTint) }
 
+    /// The colour an icon brings with it, for previews before a category
+    /// has it.
+    public static func color(forSymbol symbol: String) -> Color {
+        Color(uiColor: colorsBySymbol[symbol] ?? .systemTeal)
+    }
+
     /// UIKit form of `tint`, the single source both are drawn from.
     public var uiTint: UIColor {
         if let color = Self.colorsBySymbol[symbol] {
@@ -57,6 +63,50 @@ extension ExpenseCategory {
         "book": .systemMint,
         "sofa": .systemTeal,
         "house": .systemIndigo,
+        // The rest of the icons offered in the category editor.
+        "basket": .systemGreen,
+        "cup.and.saucer": .systemBrown,
+        "bus": .systemBlue,
+        "tram": .systemBlue,
+        "tshirt": .systemPink,
+        "gift": .systemRed,
+        "drop": .systemCyan,
+        "wifi": .systemIndigo,
+        "phone": .systemTeal,
+        "wrench.and.screwdriver": .systemGray,
+        "pills": .systemRed,
+        "heart": .systemPink,
+        "dumbbell": .systemOrange,
+        "figure.run": .systemGreen,
+        "gamecontroller": .systemPurple,
+        "music.note": .systemPink,
+        "graduationcap": .systemMint,
+        "bed.double": .systemTeal,
+        "suitcase": .systemBrown,
+        "pawprint": .systemBrown,
+        "figure.and.child.holdinghands": .systemOrange,
+        "creditcard": .systemBlue,
+        "banknote": .systemGreen,
+        "building.columns": .systemGray,
+        "doc.text": .systemGray,
+        "scissors": .systemPink,
+        // Not "tag": categories made before icons could be chosen all have
+        // it, and are spread across the palette below instead.
+    ]
+
+    /// The icons offered when making or editing a category, grouped loosely
+    /// by kind. Each has its own colour above, so choosing an icon chooses
+    /// the colour too — nothing extra is stored.
+    public static let iconChoices = [
+        "cart", "basket", "fork.knife", "cup.and.saucer",
+        "car", "bus", "tram", "fuelpump", "airplane", "suitcase", "bed.double",
+        "bag", "tshirt", "gift", "scissors",
+        "bolt", "drop", "wifi", "phone", "house", "sofa", "wrench.and.screwdriver",
+        "cross.case", "pills", "heart", "dumbbell", "figure.run",
+        "play.tv", "gamecontroller", "music.note", "book", "graduationcap",
+        "pawprint", "figure.and.child.holdinghands",
+        "creditcard", "banknote", "building.columns", "doc.text",
+        "ellipsis.circle",
     ]
 
     private static let palette: [UIColor] = [

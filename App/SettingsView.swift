@@ -740,70 +740,246 @@ struct CategoriesView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \ExpenseCategory.sortOrder) private var categories: [ExpenseCategory]
 
-    @State private var name = ""
+    @State private var adding = false
+    /// A category with expenses, waiting for the delete to be confirmed.
+    @State private var deleting: ExpenseCategory?
 
     var body: some View {
         List {
-            Section("Add") {
-                HStack {
-                    TextField("Category name", text: $name)
-                    Button("Add") {
-                        let category = ExpenseCategory(
-                            name: name.trimmingCharacters(in: .whitespaces),
-                            sortOrder: (categories.last?.sortOrder ?? 0) + 1
-                        )
-                        context.insert(category)
-                        try? context.save()
-                        name = ""
-                    }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-
             Section {
                 ForEach(categories) { category in
                     NavigationLink {
-                        SubcategoriesView(category: category)
+                        CategoryDetailView(category: category)
                     } label: {
-                        HStack(spacing: 12) {
-                            CategoryIcon(category, size: 28)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(category.name)
-                                let subcategories = category.sortedSubcategories
-                                if !subcategories.isEmpty {
-                                    Text(subcategories.map(\.name).joined(separator: ", "))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-                        }
+                        CategoryRow(category: category)
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button("Delete", role: .destructive) { delete(category) }
                     }
                 }
-                .onDelete { offsets in
-                    for index in offsets { context.delete(categories[index]) }
-                    try? context.save()
-                }
+                .onMove(perform: move)
             } footer: {
-                Text("Tap a category to add subcategories.")
+                Text("The order here is the order they're offered in. Tap Edit to drag them.")
             }
         }
         .navigationTitle("Categories")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Add Category", systemImage: "plus") { adding = true }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                EditButton()
+            }
+        }
+        .sheet(isPresented: $adding) {
+            NavigationStack {
+                NewCategoryView(
+                    nextSortOrder: (categories.map(\.sortOrder).max() ?? -1) + 1,
+                    // Start on an icon no category has yet.
+                    symbol: ExpenseCategory.iconChoices.first { icon in !categories.contains { $0.symbol == icon } }
+                        ?? "ellipsis.circle"
+                )
+            }
+        }
+        .confirmationDialog(
+            deleting.map { "Delete “\($0.name)”?" } ?? "",
+            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+            titleVisibility: .visible
+        ) {
+            if let category = deleting {
+                Button("Delete Category", role: .destructive) { remove(category) }
+            }
+        } message: {
+            if let category = deleting {
+                Text(CategoryDetailView.deleteWarning(for: category))
+            }
+        }
+    }
+
+    /// Dragged into a new order: number them in it, so every list follows.
+    private func move(from source: IndexSet, to destination: Int) {
+        var ordered = categories
+        ordered.move(fromOffsets: source, toOffset: destination)
+        for (index, category) in ordered.enumerated() where category.sortOrder != index {
+            category.sortOrder = index
+        }
+        try? context.save()
+    }
+
+    private func delete(_ category: ExpenseCategory) {
+        if (category.transactions?.count ?? 0) > 0 { deleting = category } else { remove(category) }
+    }
+
+    private func remove(_ category: ExpenseCategory) {
+        context.delete(category)
+        try? context.save()
+        deleting = nil
     }
 }
 
-/// One category's subcategories: add, rename (tap), delete (swipe).
-private struct SubcategoriesView: View {
+/// A category: its icon, name, subcategories, and how many expenses it has.
+private struct CategoryRow: View {
     let category: ExpenseCategory
 
-    @Environment(\.modelContext) private var context
-    @State private var name = ""
-    @State private var renaming: ExpenseSubcategory?
-    @State private var newName = ""
+    var body: some View {
+        HStack(spacing: 12) {
+            CategoryIcon(category, size: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(category.name)
+                    .font(.body.weight(.medium))
+                let subcategories = category.sortedSubcategories
+                if !subcategories.isEmpty {
+                    Text(subcategories.map(\.name).joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            let count = category.transactions?.count ?? 0
+            if count > 0 {
+                Text("\(count)")
+                    .font(.subheadline)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
 
-    private var subcategories: [ExpenseSubcategory] { category.sortedSubcategories }
+/// The icons on offer, each in its colour; the chosen one ringed.
+private struct IconGrid: View {
+    @Binding var symbol: String
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 10)], spacing: 10) {
+            ForEach(ExpenseCategory.iconChoices, id: \.self) { choice in
+                let color = ExpenseCategory.color(forSymbol: choice)
+                Button {
+                    symbol = choice
+                } label: {
+                    Image(systemName: choice)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(color)
+                        .frame(width: 44, height: 44)
+                        .background(color.opacity(0.16), in: .rect(cornerRadius: 12))
+                        .overlay {
+                            if choice == symbol {
+                                RoundedRectangle(cornerRadius: 12).strokeBorder(color, lineWidth: 2.5)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(choice.replacingOccurrences(of: ".", with: " "))
+                .accessibilityAddTraits(choice == symbol ? .isSelected : [])
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+/// The icon grid on a page of its own; choosing one goes back.
+private struct IconPickerPage: View {
+    @Binding var symbol: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            Section {
+                IconGrid(symbol: Binding(get: { symbol }, set: { symbol = $0; dismiss() }))
+            } footer: {
+                Text("Each icon comes with its colour.")
+            }
+        }
+        .navigationTitle("Icon")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// True when another category already has this name, ignoring case.
+private func categoryNameTaken(_ name: String, except: ExpenseCategory? = nil, in context: ModelContext) -> Bool {
+    let all = (try? context.fetch(FetchDescriptor<ExpenseCategory>())) ?? []
+    return all.contains { $0 !== except && $0.name.caseInsensitiveCompare(name) == .orderedSame }
+}
+
+/// A new category: its name and icon.
+private struct NewCategoryView: View {
+    let nextSortOrder: Int
+
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var symbol: String
+
+    init(nextSortOrder: Int, symbol: String) {
+        self.nextSortOrder = nextSortOrder
+        _symbol = State(initialValue: symbol)
+    }
 
     private var trimmed: String { name.trimmingCharacters(in: .whitespaces) }
+    private var taken: Bool { categoryNameTaken(trimmed, in: context) }
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(spacing: 12) {
+                    let preview = ExpenseCategory.color(forSymbol: symbol)
+                    Image(systemName: symbol)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(preview)
+                        .frame(width: 36, height: 36)
+                        .background(preview.opacity(0.16), in: .rect(cornerRadius: 10))
+                    TextField("Name", text: $name)
+                        .textInputAutocapitalization(.words)
+                }
+            } footer: {
+                if taken {
+                    Text("There's already a category called “\(trimmed)”.").foregroundStyle(.orange)
+                }
+            }
+            Section("Icon") {
+                IconGrid(symbol: $symbol)
+            }
+        }
+        .navigationTitle("New Category")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    context.insert(ExpenseCategory(name: trimmed, symbol: symbol, sortOrder: nextSortOrder))
+                    try? context.save()
+                    dismiss()
+                }
+                .disabled(trimmed.isEmpty || taken)
+            }
+        }
+    }
+}
+
+/// One category: rename it, change its icon, manage its subcategories, or
+/// delete it. Changes apply as they're made.
+private struct CategoryDetailView: View {
+    @Bindable var category: ExpenseCategory
+
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var newSubcategory = ""
+    @State private var renaming: ExpenseSubcategory?
+    @State private var newName = ""
+    @State private var confirmingDelete = false
+
+    init(category: ExpenseCategory) {
+        self.category = category
+        _name = State(initialValue: category.name)
+    }
+
+    private var subcategories: [ExpenseSubcategory] { category.sortedSubcategories }
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
+    private var nameTaken: Bool { categoryNameTaken(trimmedName, except: category, in: context) }
+    private var trimmedSub: String { newSubcategory.trimmingCharacters(in: .whitespaces) }
 
     /// Two subcategories with one name under one category would be
     /// indistinguishable in the picker.
@@ -813,21 +989,26 @@ private struct SubcategoriesView: View {
         }
     }
 
+    /// What deleting does to the expenses, said before it's done.
+    static func deleteWarning(for category: ExpenseCategory) -> String {
+        let count = category.transactions?.count ?? 0
+        let expenses = count == 1 ? "Its 1 expense becomes" : "Its \(count) expenses become"
+        let subs = (category.subcategories ?? []).isEmpty ? "" : " Its subcategories are deleted with it."
+        return "\(expenses) uncategorised.\(subs)"
+    }
+
     var body: some View {
-        List {
+        Form {
             Section {
-                HStack {
-                    TextField("Subcategory name", text: $name)
+                HStack(spacing: 12) {
+                    CategoryIcon(category, size: 36)
+                    TextField("Name", text: $name)
                         .textInputAutocapitalization(.words)
-                    Button("Add", action: add)
-                        .disabled(trimmed.isEmpty || isTaken(trimmed))
+                        .onSubmit(commitName)
                 }
-            } header: {
-                Text("Add")
             } footer: {
-                if isTaken(trimmed) {
-                    Text("“\(category.name)” already has “\(trimmed)”.")
-                        .foregroundStyle(.orange)
+                if nameTaken {
+                    Text("There's already a category called “\(trimmedName)”.").foregroundStyle(.orange)
                 }
             }
 
@@ -837,54 +1018,114 @@ private struct SubcategoriesView: View {
                         newName = subcategory.name
                         renaming = subcategory
                     } label: {
-                        HStack(spacing: 12) {
-                            CategoryIcon(category, size: 28)
+                        HStack {
                             Text(subcategory.name)
                             Spacer()
                             let count = subcategory.transactions?.count ?? 0
-                            Text(count == 1 ? "1 expense" : "\(count) expenses")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            if count > 0 {
+                                Text("\(count)")
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                        .contentShape(.rect)
                     }
-                    .foregroundStyle(.primary)
+                    .buttonStyle(.plain)
                 }
                 .onDelete { offsets in
-                    let doomed = offsets.map { subcategories[$0] }
-                    doomed.forEach(context.delete)
+                    offsets.map { subcategories[$0] }.forEach(context.delete)
                     try? context.save()
                 }
+                HStack {
+                    TextField("Add subcategory", text: $newSubcategory)
+                        .textInputAutocapitalization(.words)
+                        .onSubmit(addSubcategory)
+                    Button("Add", action: addSubcategory)
+                        .buttonStyle(.borderless)
+                        .disabled(trimmedSub.isEmpty || isTaken(trimmedSub))
+                }
+            } header: {
+                Text("Subcategories")
             } footer: {
-                if subcategories.isEmpty {
+                if isTaken(trimmedSub) {
+                    Text("“\(category.name)” already has “\(trimmedSub)”.").foregroundStyle(.orange)
+                } else if subcategories.isEmpty {
                     Text("Optional, like Transport › Taxi.")
                 } else {
-                    Text("Deleting one keeps its expenses in “\(category.name)”.")
+                    Text("Tap one to rename it. Deleting one keeps its expenses in “\(category.name)”.")
+                }
+            }
+
+            Section {
+                // A row, not the grid itself: forty icons would push the
+                // subcategories off the screen.
+                NavigationLink {
+                    IconPickerPage(symbol: $category.symbol)
+                } label: {
+                    LabeledContent("Icon") {
+                        CategoryIcon(category, size: 28)
+                    }
+                }
+                .accessibilityIdentifier("iconRow")
+            }
+
+            Section {
+                let count = category.transactions?.count ?? 0
+                LabeledContent("Expenses", value: "\(count)")
+                Button("Delete Category", role: .destructive) {
+                    if count > 0 { confirmingDelete = true } else { delete() }
                 }
             }
         }
         .navigationTitle(category.name)
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: category.symbol) { try? context.save() }
+        // The name is kept as typed once valid; an empty or duplicate one
+        // goes back to what it was when the page closes.
+        .onDisappear(perform: commitName)
         .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $newName)
-            Button("Save") { rename() }
+            Button("Save") { renameSubcategory() }
             Button("Cancel", role: .cancel) { renaming = nil }
+        }
+        .confirmationDialog("Delete “\(category.name)”?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete Category", role: .destructive) { delete() }
+        } message: {
+            Text(Self.deleteWarning(for: category))
         }
     }
 
-    private func add() {
-        let next = (subcategories.map(\.sortOrder).max() ?? -1) + 1
-        context.insert(ExpenseSubcategory(name: trimmed, category: category, sortOrder: next))
-        try? context.save()
-        name = ""
+    private func commitName() {
+        guard category.modelContext != nil, !category.isDeleted else { return }
+        if trimmedName.isEmpty || nameTaken {
+            name = category.name
+        } else if trimmedName != category.name {
+            category.name = trimmedName
+            try? context.save()
+        }
     }
 
-    private func rename() {
+    private func addSubcategory() {
+        guard !trimmedSub.isEmpty, !isTaken(trimmedSub) else { return }
+        let next = (subcategories.map(\.sortOrder).max() ?? -1) + 1
+        context.insert(ExpenseSubcategory(name: trimmedSub, category: category, sortOrder: next))
+        try? context.save()
+        newSubcategory = ""
+    }
+
+    private func renameSubcategory() {
         let candidate = newName.trimmingCharacters(in: .whitespaces)
         if let renaming, !candidate.isEmpty, !isTaken(candidate, except: renaming) {
             renaming.name = candidate
             try? context.save()
         }
         renaming = nil
+    }
+
+    private func delete() {
+        context.delete(category)
+        try? context.save()
+        dismiss()
     }
 }
 

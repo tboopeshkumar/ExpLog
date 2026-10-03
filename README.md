@@ -111,10 +111,19 @@ when you tap Save.
 On-device, Settings → Test message parsing does the same as the first one
 interactively: paste a message, see exactly which fields were read.
 
+## Categories
+
+Settings → Categories lists them in the order every picker uses; Edit drags
+them into a new one, + adds one. A category's page renames it, sets its icon
+(each icon brings its own colour, so nothing extra is stored), manages its
+subcategories, and deletes it — saying first that its expenses will become
+uncategorised. Categories made before icons could be chosen keep their
+colours.
+
 ## Subcategories
 
-A category can have one optional level below it — Transport › Taxi — added in
-Settings → Categories by tapping the category. The form shows a Subcategory
+A category can have one optional level below it — Transport › Taxi — added on
+the category's page in Settings → Categories. The form shows a Subcategory
 picker once the chosen category has any; changing the category clears a
 subcategory that belonged to the old one. Subcategories take their parent's
 icon and colour, are learned per merchant along with the category, and appear
