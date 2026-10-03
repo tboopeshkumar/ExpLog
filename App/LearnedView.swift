@@ -209,12 +209,15 @@ struct MessageFormatsView: View {
 
 /// The steps for a Messages automation that runs Log Expense from Message.
 struct ShortcutSetupView: View {
-    private let steps: [(String, String)] = [
-        ("In Shortcuts, tap Automation, then +.", "plus.circle"),
-        ("Choose When I Receive a Message.", "message"),
-        ("Set Message contains to a phrase all your bank's alerts use, like “was used for”.", "text.quote"),
-        ("Turn off Confirm Before Run.", "bolt"),
-        ("Add Log Expense from Message, and set its Message to the trigger's Message.", "checkmark.seal"),
+    /// Checked against Shortcuts on iOS 27.
+    private let steps: [String] = [
+        "In Shortcuts, open Library → Automation and tap +.",
+        "Tap Edit, to skip Describe a Shortcut.",
+        "In the search sheet, tap Automation, then Message.",
+        "Tap Sender and change it to Message. Tap Text and enter a phrase all your bank's alerts use, like “was used for”.",
+        "Search for ExpLog and add Log Expense from Message.",
+        "Tap its Message field → Select Variable → the trigger's Message.",
+        "Tap ⌄ beside “where” and check Confirm Before Run is off. Tap ‹ to save.",
     ]
 
     var body: some View {
@@ -222,7 +225,7 @@ struct ShortcutSetupView: View {
             Section {
                 ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
                     Label {
-                        Text(step.0)
+                        Text(step)
                     } icon: {
                         Text("\(index + 1)")
                             .font(.subheadline.bold())
@@ -232,7 +235,7 @@ struct ShortcutSetupView: View {
                     }
                 }
             } footer: {
-                Text("Make one automation per bank if their wording differs.")
+                Text("It then shows under Personal, switched on. Make one per bank if their wording differs.")
             }
 
             Section {

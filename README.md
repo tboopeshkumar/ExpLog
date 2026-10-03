@@ -345,15 +345,19 @@ OTPs, declines and anything without an amount, and says "Already logged" for an
 alert that's already there. An alert with no merchant is saved under its card
 ("Card XX5528") so nothing is lost.
 
-To have alerts logged as they arrive, make a personal automation in Shortcuts:
+To have alerts logged as they arrive, make a personal automation in Shortcuts
+(steps as of iOS 27, where Automation moved into Library):
 
-1. Automation → **+** → **When I Receive a Message**.
-2. Filter **Message contains** a phrase every alert from your bank uses (such
-   as "was used for"). Matching the text is more reliable than the sender,
-   which for banks is a name like "ADCB" rather than a contact.
-3. Leave **Automation** on and turn **Confirm Before Run** off.
-4. Add **Log Expense from Message** and set its Message to the trigger's
-   **Message** variable.
+1. **Library → Automation → +**, then **Edit** to skip Describe a Shortcut.
+2. In the search sheet, **Automation → Message**.
+3. The trigger reads "Sender is Sender": tap **Sender**, change it to
+   **Message**, and enter a phrase every alert from your bank uses (such as
+   "was used for") as the Text. Matching the text is more reliable than the
+   sender, which for banks is a name like "ADCB" rather than a contact.
+4. Search for **ExpLog**, add **Log Expense from Message**, and set its
+   Message via **Select Variable** to the trigger's **Message**.
+5. Tap **⌄** beside "where" to check **Confirm Before Run** is off, then **‹**
+   to save. It appears under Personal, switched on.
 
 Make one per bank if their wording differs. Settings → Shortcuts → **Review
 before saving** switches the action to opening ExpLog with the expense filled
