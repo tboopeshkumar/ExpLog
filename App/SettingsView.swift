@@ -456,87 +456,141 @@ struct AccountsView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Account.name) private var accounts: [Account]
 
-    @State private var name = ""
-    @State private var keywordText = ""
+    /// The card open in the editor; a new one when `adding`.
     @State private var editing: Account?
-
-    private var keywords: [String] { AccountMatching.keywords(from: keywordText) }
-    private var tooShort: [String] { AccountMatching.tooShort(keywords) }
-    private var clash: (account: Account, keyword: String)? {
-        AccountMatching.conflict(for: keywords, in: context)
-    }
-
-    private var canAdd: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty && tooShort.isEmpty && clash == nil
-    }
+    @State private var adding = false
+    /// A card with expenses, waiting for the delete to be confirmed.
+    @State private var deleting: Account?
 
     var body: some View {
         List {
-            Section {
-                TextField("Name (e.g. Crescent Credit)", text: $name)
-                TextField("SMS keywords (e.g. XXX4453)", text: $keywordText)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                Button("Add card", action: add)
-                    .disabled(!canAdd)
-            } header: {
-                Text("Add")
-            } footer: {
-                KeywordFooter(tooShort: tooShort, clash: clash, isNew: true)
-            }
-
-            Section {
-                ForEach(accounts) { account in
-                    Button {
-                        editing = account
-                    } label: {
-                        AccountRow(account: account)
+            if accounts.isEmpty {
+                ContentUnavailableView {
+                    Label("No cards yet", systemImage: "creditcard")
+                } description: {
+                    Text("Add a card with text from its SMS alerts, like XXX4453, and alerts from it are matched to it.")
+                } actions: {
+                    Button("Add Card") { adding = true }
+                        .buttonStyle(.borderedProminent)
+                }
+            } else {
+                Section {
+                    ForEach(accounts) { account in
+                        Button {
+                            editing = account
+                        } label: {
+                            AccountRow(account: account)
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing) {
+                            Button("Delete", role: .destructive) { delete(account) }
+                        }
                     }
-                    .foregroundStyle(.primary)
+                } footer: {
+                    Text("An SMS containing a card's keyword is matched to that card.")
                 }
-                .onDelete { offsets in
-                    for index in offsets { context.delete(accounts[index]) }
-                    try? context.save()
-                }
-            } header: {
-                Text("Cards")
-            } footer: {
-                Text("An SMS containing a card's keyword is matched to that card.")
             }
         }
         .navigationTitle("Cards & accounts")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Add Card", systemImage: "plus") { adding = true }
+            }
+        }
         .sheet(item: $editing) { account in
             NavigationStack { AccountEditor(account: account) }
         }
+        .sheet(isPresented: $adding) {
+            NavigationStack { AccountEditor(account: nil) }
+        }
+        .confirmationDialog(
+            deleting.map { "Delete “\($0.name)”?" } ?? "",
+            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+            titleVisibility: .visible
+        ) {
+            if let account = deleting {
+                Button("Delete Card", role: .destructive) { remove(account) }
+            }
+        } message: {
+            let count = deleting?.transactions?.count ?? 0
+            Text("\(count == 1 ? "Its 1 expense stays" : "Its \(count) expenses stay"), with no card. Its alerts won't be matched any more.")
+        }
     }
 
-    private func add() {
-        context.insert(Account(name: name.trimmingCharacters(in: .whitespaces), matchKeywords: keywords))
+    /// Straight away for an unused card; with a question for one with expenses.
+    private func delete(_ account: Account) {
+        if (account.transactions?.count ?? 0) > 0 {
+            deleting = account
+        } else {
+            remove(account)
+        }
+    }
+
+    private func remove(_ account: Account) {
+        context.delete(account)
         try? context.save()
-        name = ""
-        keywordText = ""
+        deleting = nil
     }
 }
 
+/// A card: its tile, name, keywords as tags, and how much it's used.
 private struct AccountRow: View {
     let account: Account
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
+        let expenses = account.transactions ?? []
+        let lastUsed = expenses.map(\.date).max()
+        HStack(spacing: 12) {
+            Image(systemName: "creditcard.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(Color.blue.gradient, in: .rect(cornerRadius: 9))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 5) {
                 Text(account.name)
-                Text(account.matchKeywords.isEmpty ? "No SMS keywords" : account.matchKeywords.joined(separator: ", "))
-                    .font(.caption)
-                    .monospaced()
-                    .foregroundStyle(.secondary)
+                    .font(.body.weight(.medium))
                     .lineLimit(1)
+                if account.matchKeywords.isEmpty {
+                    Text("No SMS keywords")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else {
+                    HStack(spacing: 4) {
+                        ForEach(account.matchKeywords.prefix(3), id: \.self) { keyword in
+                            Text(keyword)
+                                .font(.caption2.monospaced().weight(.medium))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 5))
+                                .accessibilityIdentifier("keyword")
+                        }
+                        if account.matchKeywords.count > 3 {
+                            Text("+\(account.matchKeywords.count - 3)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .lineLimit(1)
+                }
             }
-            Spacer()
-            let count = account.transactions?.count ?? 0
-            Text(count == 1 ? "1 expense" : "\(count) expenses")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(expenses.count == 1 ? "1 expense" : "\(expenses.count) expenses")
+                    .font(.subheadline)
+                    .monospacedDigit()
+                if let lastUsed {
+                    Text(lastUsed.formatted(.dateTime.day().month(.abbreviated)))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
+        .padding(.vertical, 2)
+        .contentShape(.rect)
     }
 }
 
@@ -559,9 +613,10 @@ private struct KeywordFooter: View {
     }
 }
 
-/// Rename a card and set the SMS keywords that identify it.
+/// Add a card, or rename one and set the SMS keywords that identify it.
 private struct AccountEditor: View {
-    let account: Account
+    /// nil when adding a card.
+    let account: Account?
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -571,24 +626,30 @@ private struct AccountEditor: View {
     /// Set when a keyword already belongs to another account, pending a merge.
     @State private var conflict: (account: Account, keyword: String)?
 
-    init(account: Account) {
+    init(account: Account?) {
         self.account = account
-        _name = State(initialValue: account.name)
-        _keywordText = State(initialValue: account.matchKeywords.joined(separator: ", "))
+        _name = State(initialValue: account?.name ?? "")
+        _keywordText = State(initialValue: account?.matchKeywords.joined(separator: ", ") ?? "")
     }
 
     private var keywords: [String] { AccountMatching.keywords(from: keywordText) }
     private var tooShort: [String] { AccountMatching.tooShort(keywords) }
     private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
 
+    /// A new card can't take another card's keyword: there's nothing yet to
+    /// merge, so it's flagged as you type instead.
+    private var newCardClash: (account: Account, keyword: String)? {
+        account == nil ? AccountMatching.conflict(for: keywords, in: context) : nil
+    }
+
     private var canSave: Bool {
-        !trimmedName.isEmpty && tooShort.isEmpty
+        !trimmedName.isEmpty && tooShort.isEmpty && newCardClash == nil
     }
 
     var body: some View {
         Form {
             Section("Name") {
-                TextField("Name", text: $name)
+                TextField("Crescent Credit", text: $name)
                     .textInputAutocapitalization(.words)
             }
 
@@ -600,14 +661,19 @@ private struct AccountEditor: View {
             } header: {
                 Text("SMS keywords")
             } footer: {
-                KeywordFooter(tooShort: tooShort, clash: nil, isNew: false)
+                KeywordFooter(tooShort: tooShort, clash: newCardClash, isNew: account == nil)
             }
 
-            Section {
-                LabeledContent("Expenses", value: "\(account.transactions?.count ?? 0)")
+            if let account {
+                Section {
+                    LabeledContent("Expenses", value: "\(account.transactions?.count ?? 0)")
+                    if let last = account.transactions?.map(\.date).max() {
+                        LabeledContent("Last used", value: last.formatted(.dateTime.day().month(.abbreviated).year()))
+                    }
+                }
             }
         }
-        .navigationTitle("Edit card")
+        .navigationTitle(account == nil ? "New Card" : "Edit Card")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -635,6 +701,12 @@ private struct AccountEditor: View {
     }
 
     private func save() {
+        guard let account else {
+            context.insert(Account(name: trimmedName, matchKeywords: keywords))
+            try? context.save()
+            dismiss()
+            return
+        }
         if let clash = AccountMatching.conflict(for: keywords, excluding: account, in: context) {
             conflict = clash
             return
@@ -643,6 +715,7 @@ private struct AccountEditor: View {
     }
 
     private func apply(merging other: Account?) {
+        guard let account else { return }
         account.name = trimmedName
         account.matchKeywords = keywords
         do {

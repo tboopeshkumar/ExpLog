@@ -30,6 +30,9 @@ public struct TransactionFormView: View {
     /// What happened to the last pick, shown under the merchant.
     @State private var pickNote: String?
     @State private var errorMessage: String?
+    @State private var choosingCurrency = false
+    @State private var choosingCategory = false
+    @State private var choosingAccount = false
     /// Which field has the keyboard: the amount first, then the merchant.
     private enum Field { case amount, merchant }
     @FocusState private var focus: Field?
@@ -58,9 +61,10 @@ public struct TransactionFormView: View {
         Form {
             amountSection
             detailSection
-            if showsCategoryAndAccount, !categories.isEmpty {
-                Section("Category") {
-                    CategoryChips(categories: categories, category: $draft.category, subcategory: $draft.subcategory)
+            if showsCategoryAndAccount {
+                Section {
+                    categoryRow
+                    accountRow
                 }
             }
             // Not offered for a card too short to be a safe keyword (a bare
@@ -104,6 +108,15 @@ public struct TransactionFormView: View {
             guard draft.amount == 0, draft.rawMessage == nil else { return }
             try? await Task.sleep(for: .milliseconds(450))
             focus = .amount
+        }
+        .sheet(isPresented: $choosingCurrency) {
+            CurrencyPickerSheet(selection: $draft.currencyCode)
+        }
+        .sheet(isPresented: $choosingCategory) {
+            CategoryPickerSheet(categories: categories, category: $draft.category, subcategory: $draft.subcategory)
+        }
+        .sheet(isPresented: $choosingAccount) {
+            AccountPickerSheet(accounts: accounts, selection: $draft.account)
         }
         .alert("Couldn't save", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
@@ -168,27 +181,15 @@ public struct TransactionFormView: View {
         }
     }
 
-    /// The currency as a pill above the amount; tap for the others — the
-    /// main one and those arranged in Settings first.
+    /// The currency as a pill above the amount; tap for the list — the main
+    /// one and those arranged in Settings first.
     private var currencyMenu: some View {
-        Menu {
-            let yours = [Currency.main] + Currency.yours
-            Picker("Currency", selection: $draft.currencyCode) {
-                Section {
-                    ForEach(yours, id: \.self) { code in
-                        Text("\(code) · \(Currency.name(for: code))").tag(code)
-                    }
-                }
-                Section {
-                    ForEach(Currency.supported.filter { !yours.contains($0) }, id: \.self) { code in
-                        Text("\(code) · \(Currency.name(for: code))").tag(code)
-                    }
-                }
-            }
+        Button {
+            focus = nil
+            choosingCurrency = true
         } label: {
             HStack(spacing: 4) {
-                Formatting.currencySign(for: draft.currencyCode)
-                Text(draft.currencyCode)
+                Formatting.currencyLabel(for: draft.currencyCode)
                 Image(systemName: "chevron.down")
                     .font(.caption2.weight(.bold))
             }
@@ -200,6 +201,33 @@ public struct TransactionFormView: View {
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("Currency: \(Currency.name(for: draft.currencyCode))")
+        .accessibilityIdentifier("currencyPill")
+    }
+
+    /// "Transport › Taxi" with its icon, or a prompt when there's none yet.
+    private var categoryRow: some View {
+        ChoiceRow(title: "Category", action: { focus = nil; choosingCategory = true }) {
+            if let category = draft.category {
+                HStack(spacing: 8) {
+                    CategoryIcon(category, size: 24)
+                    Text([category.name, draft.subcategory?.name].compactMap { $0 }.joined(separator: " › "))
+                        .foregroundStyle(.secondary)
+                        .truncationMode(.middle)
+                }
+            } else {
+                Text("Choose").foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityIdentifier("categoryRow")
+    }
+
+    private var accountRow: some View {
+        ChoiceRow(title: "Paid with", action: { focus = nil; choosingAccount = true }) {
+            Text(draft.account?.name ?? "None")
+                .foregroundStyle(.secondary)
+                .truncationMode(.middle)
+        }
+        .accessibilityIdentifier("accountRow")
     }
 
     /// Keeps what can be part of an amount: digits and one decimal mark,
@@ -298,18 +326,8 @@ public struct TransactionFormView: View {
         }
     }
 
-    /// The card it was paid with, and a note.
     private var noteSection: some View {
         Section {
-            if showsCategoryAndAccount {
-                Picker("Account", selection: $draft.account) {
-                    Text("None").tag(Account?.none)
-                    ForEach(accounts) { account in
-                        Text(account.name)
-                            .tag(Account?.some(account))
-                    }
-                }
-            }
             TextField("Add a note", text: $draft.note, axis: .vertical)
                 .lineLimit(1...4)
         }

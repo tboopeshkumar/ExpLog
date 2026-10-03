@@ -330,12 +330,17 @@ repository: they're real spending.
 
 A new expense opens on the amount, keyboard up; Next moves on to the merchant.
 The amount field takes digits and one decimal mark, and no more decimals than
-the currency has (two for dirhams, three for dinars, none for yen). The
-currency is the pill above it — your currencies first, as arranged in
-Settings. Categories are a row of coloured chips, one tap to choose and
-another to clear; a category with subcategories shows them as a second row.
-The same form backs the share extension and editing ("Edit Expense").
-`ExpenseFormUITests` drives it.
+the currency has (two for dirhams, three for dinars, none for yen).
+
+Currency, category and card are each a row showing the current choice, which
+opens a searchable list in a sheet: currencies (yours first, as arranged in
+Settings), categories with their subcategories indented beneath (the same list
+as swipe-to-categorise), and cards with their keywords. A sheet rather than an
+in-form menu, because a menu in a Form rebuilds the form around it — the page
+jumped and the chosen value cropped or shifted. The currency pill shows a sign
+only where it's a symbol of its own: "$ USD", "₹ INR", but "OMR" and "CAD"
+rather than "OMR OMR" or "CA$ CAD". The same form backs the share extension
+and editing. `ExpenseFormUITests` drives it.
 
 ## Quick actions
 

@@ -70,19 +70,12 @@ struct QuickCategorySheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(categories) { category in
-                    choice(category: category, subcategory: nil)
-                    ForEach(category.sortedSubcategories) { subcategory in
-                        choice(category: category, subcategory: subcategory)
-                    }
-                }
-                if transaction.category != nil {
-                    Section {
-                        Button("Remove category", role: .destructive) { apply(nil, nil) }
-                    }
-                }
-            }
+            CategoryPickerList(
+                categories: categories,
+                category: transaction.category,
+                subcategory: transaction.subcategory,
+                onPick: apply
+            )
             .navigationTitle(transaction.merchant.isEmpty ? "Categorise" : transaction.merchant)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -92,38 +85,6 @@ struct QuickCategorySheet: View {
             }
         }
         .presentationDetents([.medium, .large])
-    }
-
-    /// A category row, or a subcategory row indented beneath its parent.
-    private func choice(category: ExpenseCategory, subcategory: ExpenseSubcategory?) -> some View {
-        let isCurrent = transaction.category === category && transaction.subcategory === subcategory
-        return Button {
-            apply(category, subcategory)
-        } label: {
-            HStack(spacing: 12) {
-                if let subcategory {
-                    // Indented past the category's name, one size down, so
-                    // it reads as belonging to the row above.
-                    Text(subcategory.name)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 56)
-                } else {
-                    CategoryIcon(category, size: 28)
-                    Text(category.name)
-                }
-                Spacer()
-                if isCurrent {
-                    Image(systemName: "checkmark")
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.tint)
-                }
-            }
-            // The whole row is the target, not just the text.
-            .contentShape(.rect)
-        }
-        // Plain, so names are text, not blue link-coloured buttons.
-        .buttonStyle(.plain)
     }
 
     private func apply(_ category: ExpenseCategory?, _ subcategory: ExpenseSubcategory?) {

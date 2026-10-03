@@ -29,20 +29,20 @@ final class CurrencyOrderUITests: XCTestCase {
             .reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
     }
 
-    /// The form's currency menu, opened; the menu items' top edges by code.
+    /// The form's currency list, opened; rows' top edges by code.
     private func openCurrencyMenu() -> (XCUIElement) -> CGFloat {
         app.tabBars.buttons["Expenses"].tap()
         app.navigationBars.buttons["Add"].firstMatch.tap()
-        let sign = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Currency:'")).firstMatch
-        XCTAssertTrue(sign.waitForExistence(timeout: 5))
-        sign.tap()
-        XCTAssertTrue(item("AED").waitForExistence(timeout: 5), "the currency menu opens")
+        let pill = app.buttons["currencyPill"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 5))
+        pill.tap()
+        XCTAssertTrue(item("AED").waitForExistence(timeout: 5), "the currency list opens")
         sleep(1)
         return { $0.frame.minY }
     }
 
     private func item(_ code: String) -> XCUIElement {
-        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "\(code) ·")).firstMatch
+        app.buttons["currency-\(code)"]
     }
 
     private func checkOrder(_ order: [String], name: String) {

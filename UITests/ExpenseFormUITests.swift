@@ -1,9 +1,9 @@
 import XCTest
 
-/// Adding an expense by hand: the amount field, Next, category and
-/// subcategory chips, Save. Deletes what it adds, so it can run again.
+/// Adding an expense by hand: the amount field, Next, the currency,
+/// category and card lists, Save. Deletes what it adds, so it can run again.
 ///
-/// Expects the seeded Transport category with a Taxi subcategory.
+/// Expects the seeded Transport category with a Taxi subcategory, and a card.
 final class ExpenseFormUITests: XCTestCase {
     private let app = XCUIApplication()
 
@@ -36,15 +36,37 @@ final class ExpenseFormUITests: XCTestCase {
         XCTAssertTrue(merchant.value(forKey: "hasKeyboardFocus") as? Bool ?? false, "Next moves to the merchant")
         merchant.typeText("Form Test Cab\n")
 
-        let transport = app.buttons["category-Transport"]
-        XCTAssertTrue(transport.waitForExistence(timeout: 3))
-        transport.tap()
-        XCTAssertTrue(transport.isSelected, "the chip shows it's chosen")
-        let taxi = app.buttons["subcategory-Taxi"]
-        XCTAssertTrue(taxi.waitForExistence(timeout: 3), "the category's subcategories appear")
-        taxi.tap()
-        XCTAssertTrue(taxi.isSelected)
-        snapshot("2 category chosen")
+        // Currency: a list in a sheet, searchable; a sign only where it's a symbol.
+        app.buttons["currencyPill"].tap()
+        XCTAssertTrue(app.navigationBars["Currency"].waitForExistence(timeout: 3))
+        app.searchFields.firstMatch.tap()
+        app.searchFields.firstMatch.typeText("rial")
+        let omr = app.buttons["currency-OMR"]
+        XCTAssertTrue(omr.waitForExistence(timeout: 3), "search finds the Omani rial by name")
+        snapshot("2 currency search")
+        omr.tap()
+        XCTAssertTrue(app.staticTexts["OMR"].waitForExistence(timeout: 3), "the pill says OMR once")
+        XCTAssertFalse(app.staticTexts["OMR OMR"].exists)
+        app.buttons["currencyPill"].tap()
+        app.buttons["currency-AED"].tap()
+
+        // Category: the row opens the list; a subcategory sets both.
+        app.buttons["categoryRow"].tap()
+        XCTAssertTrue(app.navigationBars["Category"].waitForExistence(timeout: 3))
+        sleep(1)
+        snapshot("3 category list")
+        app.buttons["subcategory-Taxi"].tap()
+        XCTAssertTrue(app.staticTexts["Transport › Taxi"].waitForExistence(timeout: 3), "the row shows the choice")
+
+        // Paid with: the same pattern.
+        app.buttons["accountRow"].tap()
+        XCTAssertTrue(app.navigationBars["Paid with"].waitForExistence(timeout: 3))
+        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'account-' AND identifier != 'account-none'")).firstMatch
+        XCTAssertTrue(card.exists, "cards are listed")
+        let cardName = String(card.identifier.dropFirst("account-".count))
+        card.tap()
+        XCTAssertTrue(app.staticTexts[cardName].waitForExistence(timeout: 3), "the row shows the card")
+        snapshot("4 filled in")
 
         let save = app.navigationBars["New Expense"].buttons["Save"]
         XCTAssertTrue(save.isEnabled)
@@ -59,8 +81,8 @@ final class ExpenseFormUITests: XCTestCase {
         row.tap()
         XCTAssertTrue(app.navigationBars["Edit Expense"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.textFields["amount"].value as? String, "42.56")
-        XCTAssertTrue(app.buttons["category-Transport"].isSelected)
-        snapshot("3 editing")
+        XCTAssertTrue(app.staticTexts["Transport › Taxi"].exists, "editing shows the category")
+        snapshot("5 editing")
         app.navigationBars["Edit Expense"].buttons["Cancel"].tap()
 
         row.swipeLeft()

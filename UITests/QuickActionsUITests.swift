@@ -34,7 +34,7 @@ final class QuickActionsUITests: XCTestCase {
 
         // Categorise → Transport › Taxi.
         categorise.tap()
-        let taxi = app.buttons["Taxi"].firstMatch
+        let taxi = app.buttons["subcategory-Taxi"].firstMatch
         XCTAssertTrue(taxi.waitForExistence(timeout: 5), "subcategories listed under their category")
         sleep(1)   // let the sheet finish sliding in before the screenshot
         snapshot("2 categorise sheet")

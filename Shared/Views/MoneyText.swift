@@ -46,6 +46,17 @@ extension Formatting {
         code == "AED" ? Text(dirhamSign) : Text(Currency.symbol(for: code))
     }
 
+    /// The currency for a label: its sign and code where the sign is a
+    /// symbol of its own ("$ USD", "₹ INR", the Dirham sign), the code alone
+    /// where the sign is only letters ("OMR", not "OMR OMR"; "CAD", not
+    /// "CA$ CAD").
+    public static func currencyLabel(for code: String) -> Text {
+        if code == "AED" { return Text(dirhamSign) + Text(" AED") }
+        let symbol = Currency.symbol(for: code)
+        if symbol == code || symbol.contains(where: \.isLetter) { return Text(code) }
+        return Text("\(symbol) \(code)")
+    }
+
     private static var dirhamSign: Image {
         // Labelled so VoiceOver says "dirhams" rather than the asset name.
         Image("dirham", label: Text("dirhams"))
