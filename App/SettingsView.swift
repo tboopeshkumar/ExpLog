@@ -327,69 +327,95 @@ struct ExchangeRatesView: View {
         hidden = Currency.order(Currency.codes(hidden).filter { !removed.contains($0) } + removed)
     }
 
-    var body: some View {
-        List {
-            Section {
-                if listed.isEmpty {
-                    Text("No other currencies yet. You can add a rate before you travel.")
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(listed, id: \.self) { code in
-                    RateRow(
-                        code: code,
-                        main: mainCurrency,
-                        unratedCount: Currency.unrated(code, in: transactions).count,
-                        ratesJSON: $ratesJSON,
-                        applyToUnrated: { rate in
-                            Currency.applyRate(rate, toUnrated: code, main: mainCurrency, in: transactions)
-                            try? context.save()
-                        }
-                    )
-                    .accessibilityIdentifier("currency-\(code)")
-                }
-                .onMove { from, to in
-                    var codes = listed
-                    codes.move(fromOffsets: from, toOffset: to)
-                    order = Currency.order(codes)
-                }
-                .onDelete(perform: remove)
-            } header: {
-                Text("Rates from \(mainCurrency)")
-            } footer: {
-                Text("Offered first when logging, in this order. Rate changes apply to new expenses only.")
-            }
+    @State private var adding = false
+    /// The rate field with the keyboard, by currency code.
+    @FocusState private var editingRate: String?
 
-            let addable = Currency.pickerOrder.filter { $0 != mainCurrency && !listed.contains($0) }
-            if !addable.isEmpty {
+    private func add(_ code: String) {
+        order = Currency.order(listed + [code])
+        hidden = Currency.order(Currency.codes(hidden).filter { $0 != code })
+    }
+
+    var body: some View {
+        let listed = listed
+        let counts = Dictionary(transactions.map { ($0.currencyCode, 1) }, uniquingKeysWith: +)
+        List {
+            if listed.isEmpty {
+                ContentUnavailableView {
+                    Label("No other currencies", systemImage: "arrow.left.arrow.right")
+                } description: {
+                    Text("Add one you spend in, with its rate, and its expenses count in your \(mainCurrency) totals.")
+                } actions: {
+                    Button("Add Currency") { adding = true }
+                        .buttonStyle(.borderedProminent)
+                }
+            } else {
                 Section {
-                    Menu {
-                        ForEach(addable, id: \.self) { code in
-                            Button("\(code) · \(Currency.name(for: code))") {
-                                order = Currency.order(listed + [code])
-                                hidden = Currency.order(Currency.codes(hidden).filter { $0 != code })
+                    ForEach(listed, id: \.self) { code in
+                        RateRow(
+                            code: code,
+                            main: mainCurrency,
+                            expenseCount: counts[code] ?? 0,
+                            unratedCount: Currency.unrated(code, in: transactions).count,
+                            ratesJSON: $ratesJSON,
+                            focus: $editingRate,
+                            applyToUnrated: { rate in
+                                Currency.applyRate(rate, toUnrated: code, main: mainCurrency, in: transactions)
+                                try? context.save()
                             }
-                        }
-                    } label: {
-                        Label("Add a currency", systemImage: "plus")
+                        )
+                        .accessibilityIdentifier("currency-\(code)")
                     }
+                    .onMove { from, to in
+                        var codes = listed
+                        codes.move(fromOffsets: from, toOffset: to)
+                        order = Currency.order(codes)
+                    }
+                    .onDelete(perform: remove)
+                } header: {
+                    Text("Rates from \(mainCurrency)")
+                } footer: {
+                    Text("Offered first when logging, in this order. A rate applies to expenses logged from now on; ones already logged keep theirs.")
                 }
             }
         }
-        .navigationTitle("Currencies")
+        .navigationTitle("Other currencies")
         .navigationBarTitleDisplayMode(.inline)
+        .scrollDismissesKeyboard(.interactively)
         .toolbar {
-            if listed.count > 1 { EditButton() }
+            ToolbarItem(placement: .primaryAction) {
+                Button("Add Currency", systemImage: "plus") { adding = true }
+            }
+            if listed.count > 1 {
+                ToolbarItem(placement: .topBarTrailing) { EditButton() }
+            }
+            // The number pad has no return key.
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { editingRate = nil }
+                    .fontWeight(.semibold)
+            }
+        }
+        .sheet(isPresented: $adding) {
+            CurrencyPickerSheet(
+                selection: Binding(get: { "" }, set: { add($0) }),
+                title: "Add Currency",
+                excluding: Set(listed + [mainCurrency])
+            )
         }
     }
 }
 
-/// "1 AED = [22.70] INR", what a round amount comes to, and — when older
-/// expenses in this currency have no rate — an offer to give them this one.
+/// A currency: its code and name, "1 AED = [22.70] INR", what a round amount
+/// comes to, and — when older expenses in it have no rate — an offer to give
+/// them this one.
 private struct RateRow: View {
     let code: String
     let main: String
+    let expenseCount: Int
     let unratedCount: Int
     @Binding var ratesJSON: String
+    var focus: FocusState<String?>.Binding
     let applyToUnrated: (Decimal) -> Void
 
     @State private var text = ""
@@ -400,24 +426,49 @@ private struct RateRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(code)
+                    .font(.body.weight(.semibold))
+                Text(Currency.name(for: code))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if expenseCount > 0 {
+                    Text("\(expenseCount)×")
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(expenseCount == 1 ? "1 expense" : "\(expenseCount) expenses")
+                }
+            }
+
             HStack(spacing: 8) {
-                (Text("1 ") + Formatting.currencySign(for: main) + Text(" ="))
+                Text("1 \(main) =")
                     .foregroundStyle(.secondary)
                 TextField("Rate", text: $text)
                     .keyboardType(.decimalPad)
                     .monospacedDigit()
                     .multilineTextAlignment(.trailing)
+                    .focused(focus, equals: code)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .frame(width: 120)
+                    .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 8))
+                    .accessibilityLabel("Rate: \(code) per 1 \(main)")
                 Text(code)
-                    .monospaced()
+                    .foregroundStyle(.secondary)
             }
+            .font(.subheadline)
+
             Group {
                 if let rate {
                     // A round amount of the other currency, and what it comes to.
                     let sample = Decimal(100) * rate >= 1000 ? Decimal(1000) : Decimal(100)
                     Formatting.moneyText(sample, code: code) + Text(" ≈ ") + Formatting.moneyText(sample / rate, code: main)
                 } else if text.isEmpty {
-                    Text("\(Currency.name(for: code)) — no rate yet")
+                    Text("No rate: expenses in \(code) aren't counted in totals.")
+                        .foregroundStyle(.orange)
                 } else {
                     Text("Enter a number, like 22.70")
                         .foregroundStyle(.orange)
@@ -434,10 +485,13 @@ private struct RateRow: View {
                        : "Apply to \(unratedCount) earlier expenses without a rate") {
                     applyToUnrated(rate)
                 }
-                .font(.caption)
-                .buttonStyle(.borderless)
+                .font(.caption.weight(.medium))
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
             }
         }
+        .padding(.vertical, 4)
         .onAppear {
             text = ExchangeRates(main: main, json: ratesJSON).rate(for: code).map { "\($0)" } ?? ""
         }

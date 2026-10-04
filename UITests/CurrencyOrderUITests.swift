@@ -50,7 +50,7 @@ final class CurrencyOrderUITests: XCTestCase {
 
         app.tabBars.buttons["Settings"].tap()
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Other currencies'")).firstMatch.tap()
-        XCTAssertTrue(app.navigationBars["Currencies"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Other currencies"].waitForExistence(timeout: 5))
         XCTAssertEqual(Array(listedCodes().prefix(order.count)), order, "Settings lists them in the saved order")
         XCTAssertTrue(app.buttons["Edit"].exists, "Edit, to drag them")
         app.navigationBars.buttons.element(boundBy: 0).tap()
@@ -69,6 +69,44 @@ final class CurrencyOrderUITests: XCTestCase {
     func testThePickerFollowsTheSavedOrder() throws {
         checkOrder(["USD", "INR"], name: "1 USD first")
         checkOrder(["INR", "USD"], name: "2 INR first")
+    }
+
+    /// Adding a currency from the searchable list, giving it a rate, and
+    /// removing it again.
+    func testAddingRatingAndRemovingACurrency() throws {
+        app.launch()
+        app.tabBars.buttons["Settings"].tap()
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Other currencies'")).firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Other currencies"].waitForExistence(timeout: 5))
+        sleep(1)
+        // Left behind if an earlier run was cut short.
+        if app.textFields["currency-JPY"].exists {
+            app.textFields["currency-JPY"].swipeLeft()
+            app.buttons["Delete"].firstMatch.tap()
+        }
+        snapshot("3 currencies")
+
+        app.navigationBars["Other currencies"].buttons["Add Currency"].tap()
+        XCTAssertTrue(app.navigationBars["Add Currency"].waitForExistence(timeout: 3))
+        XCTAssertFalse(item("AED").exists, "the main currency isn't offered")
+        app.searchFields.firstMatch.tap()
+        app.searchFields.firstMatch.typeText("yen")
+        XCTAssertTrue(item("JPY").waitForExistence(timeout: 3))
+        item("JPY").tap()
+
+        // The row's identifier covers its parts, the rate field included.
+        let rate = app.textFields["currency-JPY"]
+        XCTAssertTrue(rate.waitForExistence(timeout: 5), "added to the list")
+        rate.tap()
+        rate.typeText("40")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '≈' AND label CONTAINS '25.00'")).firstMatch
+            .waitForExistence(timeout: 3), "what a round amount comes to: ¥1,000 ≈ 25.00")
+        snapshot("4 rate entered")
+        app.buttons["Done"].firstMatch.tap()
+
+        rate.swipeLeft()
+        app.buttons["Delete"].firstMatch.tap()
+        XCTAssertFalse(app.textFields["currency-JPY"].waitForExistence(timeout: 2), "removed")
     }
 
     private func snapshot(_ name: String) {

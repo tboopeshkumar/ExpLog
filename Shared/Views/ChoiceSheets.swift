@@ -45,10 +45,14 @@ private struct Check: View {
 /// first, then the rest. Search matches code or name.
 struct CurrencyPickerSheet: View {
     @Binding var selection: String
+    var title = "Currency"
+    /// Left out of the list: currencies that can't be chosen here.
+    var excluding: Set<String> = []
     @Environment(\.dismiss) private var dismiss
     @State private var search = ""
 
     private func matches(_ code: String) -> Bool {
+        guard !excluding.contains(code) else { return false }
         let query = search.trimmingCharacters(in: .whitespaces)
         return query.isEmpty
             || code.localizedCaseInsensitiveContains(query)
@@ -70,7 +74,7 @@ struct CurrencyPickerSheet: View {
                 }
             }
             .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Code or name")
-            .navigationTitle("Currency")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
