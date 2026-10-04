@@ -455,7 +455,12 @@ beside each bar say which category it is.
 ## Currencies
 
 Every expense keeps its own currency (ISO 4217 code). Settings → Main currency
-picks the default for new expenses and the currency totals are counted in; on
+picks the default for new expenses and the currency totals are counted in.
+The page shows the current one, then the currencies you've spent in (most
+used first) and the rest, with search. Changing it is confirmed when there
+are expenses, saying what happens: totals switch to the new currency, and
+expenses in the old one stop counting until it has a rate — nothing is
+converted or deleted. On
 first launch it's set from whichever currency most existing expenses use, else
 the device's region. The form's currency sign is a menu, for spending abroad,
 and the parser recognises about thirty major currencies in alerts

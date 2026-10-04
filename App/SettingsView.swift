@@ -261,35 +261,132 @@ private struct SettingsRow: View {
 
 // MARK: - Main currency
 
-/// Every supported currency by code and name; choosing one goes back.
+/// The currency totals are counted in. Shows the current one, then every
+/// supported currency — the ones you've spent in first — with search.
+/// Switching is confirmed when there are expenses, because it changes what
+/// counts in the totals.
 private struct MainCurrencyPicker: View {
     @Binding var selection: String
     @Environment(\.dismiss) private var dismiss
+    @Query private var transactions: [Transaction]
+    @State private var search = ""
+    /// The currency tapped, waiting for the switch to be confirmed.
+    @State private var pending: String?
+
+    private func matches(_ code: String) -> Bool {
+        let query = search.trimmingCharacters(in: .whitespaces)
+        return query.isEmpty
+            || code.localizedCaseInsensitiveContains(query)
+            || Currency.name(for: code).localizedCaseInsensitiveContains(query)
+    }
 
     var body: some View {
-        List(Currency.pickerOrder, id: \.self) { code in
-            Button {
-                selection = code
-                dismiss()
-            } label: {
-                HStack {
-                    Text(code)
-                        .monospaced()
-                    Text(Currency.name(for: code))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if code == selection {
-                        Image(systemName: "checkmark")
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.tint)
+        let counts = Dictionary(transactions.map { ($0.currencyCode, 1) }, uniquingKeysWith: +)
+        // Spent in, most used first; then the rest in the usual order.
+        let used = Currency.supported.filter { counts[$0] != nil && $0 != selection }
+            .sorted { counts[$0]! > counts[$1]! }
+        let others = Currency.supported.filter { counts[$0] == nil && $0 != selection }
+
+        List {
+            if search.isEmpty {
+                Section {
+                    VStack(spacing: 6) {
+                        Formatting.currencyLabel(for: selection)
+                            .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                        Text(Currency.name(for: selection))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("currentMain")
+                } footer: {
+                    Text("Totals are counted in it, and new expenses start in it.")
                 }
-                .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+
+            let shownUsed = used.filter(matches)
+            if !shownUsed.isEmpty {
+                Section("You've spent in") {
+                    ForEach(shownUsed, id: \.self) { row($0, count: counts[$0]) }
+                }
+            }
+            let shownOthers = others.filter(matches)
+            if !shownOthers.isEmpty {
+                Section(used.isEmpty ? "Change to" : "All currencies") {
+                    ForEach(shownOthers, id: \.self) { row($0, count: nil) }
+                }
+            }
+        }
+        .searchable(text: $search, prompt: "Code or name")
+        .overlay {
+            if !search.isEmpty, !(used + others).contains(where: matches) {
+                ContentUnavailableView.search(text: search)
+            }
         }
         .navigationTitle("Main currency")
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(
+            pending.map { "Change main currency to \($0)?" } ?? "",
+            isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
+            titleVisibility: .visible
+        ) {
+            if let code = pending {
+                Button("Change to \(code)") {
+                    selection = code
+                    pending = nil
+                    dismiss()
+                }
+            }
+            Button("Cancel", role: .cancel) { pending = nil }
+        } message: {
+            if let code = pending {
+                Text(Self.warning(from: selection, to: code, counts: counts))
+            }
+        }
+    }
+
+    private func row(_ code: String, count: Int?) -> some View {
+        Button {
+            // Nothing logged: nothing to explain.
+            if transactions.isEmpty {
+                selection = code
+                dismiss()
+            } else {
+                pending = code
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Text(code)
+                    .font(.body.monospaced().weight(.semibold))
+                    .frame(width: 48, alignment: .leading)
+                Text(Currency.name(for: code))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer()
+                if let count {
+                    Text("\(count)×")
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(count == 1 ? "1 expense" : "\(count) expenses")
+                }
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("currency-\(code)")
+    }
+
+    /// What switching does to the totals, said before it's done.
+    static func warning(from old: String, to new: String, counts: [String: Int]) -> String {
+        var lines = ["Totals will be counted in \(new)."]
+        if let inOld = counts[old], inOld > 0 {
+            lines.append("Your \(inOld == 1 ? "1 expense" : "\(inOld) expenses") in \(old) won't count until \(old) has a rate in Other currencies; that page can then apply it to them.")
+        }
+        lines.append("Nothing is converted or deleted, and you can change back.")
+        return lines.joined(separator: " ")
     }
 }
 
