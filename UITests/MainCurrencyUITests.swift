@@ -35,8 +35,12 @@ final class MainCurrencyUITests: XCTestCase {
         XCTAssertTrue(change.waitForExistence(timeout: 3), "the switch is confirmed first")
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Totals will be counted in EUR'")).firstMatch.exists)
         snapshot("2 confirmation")
-        app.buttons["Cancel"].firstMatch.tap()
-        XCTAssertTrue(app.navigationBars["Main currency"].exists, "cancelled: still here")
+        // The dialog has no Cancel button on this iOS; tapping outside
+        // dismisses it.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        XCTAssertTrue(change.waitForNonExistence(timeout: 3), "dismissed without changing")
+        XCTAssertTrue(app.navigationBars["Main currency"].exists, "still on the page")
+        XCTAssertTrue(euro.exists, "EUR is still only offered, not chosen")
     }
 
     private func snapshot(_ name: String) {

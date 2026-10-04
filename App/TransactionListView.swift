@@ -246,8 +246,24 @@ private struct SearchResults: View {
     @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
     @Environment(\.dismissSearch) private var dismissSearch
 
+    /// Every expense with what's searchable about it, newest first. Built
+    /// once when search opens: a keystroke then only compares strings.
+    @State private var index: [(transaction: Transaction, entry: ExpenseSearch.Entry)] = []
+    @State private var matches: [Transaction] = []
+    /// The text `matches` is for; nil until the first search has run.
+    @State private var searched: String?
+
+    private func buildIndex() {
+        index = transactions.map { ($0, ExpenseSearch.entry(for: $0)) }
+    }
+
+    private func run() {
+        let tokens = ExpenseSearch.tokens(searchText)
+        matches = index.filter { ExpenseSearch.matches($0.entry, tokens: tokens) }.map(\.transaction)
+        searched = searchText
+    }
+
     var body: some View {
-        let matches = transactions.filter { ExpenseSearch.matches($0, query: searchText) }
         let months = Dictionary(grouping: matches) { Formatting.monthStart($0.date) }
             .map { (start: $0.key, items: $0.value) }
             .sorted { $0.start > $1.start }
@@ -297,8 +313,23 @@ private struct SearchResults: View {
             }
         }
         .listSectionSpacing(.compact)
+        // Typing isn't held up by the search: it runs once the keys pause.
+        .task(id: searchText) {
+            if index.isEmpty {
+                buildIndex()
+            } else {
+                try? await Task.sleep(for: .milliseconds(150))
+                if Task.isCancelled { return }
+            }
+            run()
+        }
+        .onChange(of: transactions.count) {
+            // One was deleted or added from here.
+            buildIndex()
+            run()
+        }
         .overlay {
-            if matches.isEmpty {
+            if matches.isEmpty, searched == searchText {
                 ContentUnavailableView {
                     Label("No results for “\(searchText)”", systemImage: "magnifyingglass")
                 } description: {

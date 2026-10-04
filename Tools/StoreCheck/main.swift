@@ -1021,6 +1021,22 @@ func run() throws {
     expect(finds("uncat", bigShop) && finds("uncategorized", taxiRide), "uncategorised, either spelling")
     expect(!finds("", taxiRide) && !finds("   ", taxiRide), "nothing typed matches nothing")
 
+    // Fast enough to run on every pause in typing: 20,000 expenses indexed
+    // once, then searched.
+    let many = (0..<20_000).map { i in
+        Transaction(amount: Decimal(i % 500) + Decimal(string: "0.25")!, currencyCode: "AED",
+                    date: day(1 + i % 12, 1 + i % 27), merchant: "Merchant \(i % 300)", note: i % 7 == 0 ? "weekly" : "")
+    }
+    var clock = Date()
+    let manyEntries = many.map { ExpenseSearch.entry(for: $0, calendar: calendar) }
+    let indexing = Date().timeIntervalSince(clock)
+    clock = Date()
+    let found = manyEntries.filter { ExpenseSearch.matches($0, tokens: ExpenseSearch.tokens("merchant 42 jul")) }.count
+    let searching = Date().timeIntervalSince(clock)
+    expect(found > 0 && searching < 0.1, "20,000 expenses searched in under 0.1 s",
+           String(format: "%.0f ms to search, %.0f ms to index, %d found", searching * 1000, indexing * 1000, found))
+    print(String(format: "    (%.0f ms to search, %.0f ms to index once)", searching * 1000, indexing * 1000))
+
     print("")
     if failures == 0 {
         print("All checks passed.\n")

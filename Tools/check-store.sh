@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")/.."
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 mkdir -p .build
-xcrun swiftc -target arm64-apple-macosx15.0 -o .build/storecheck \
+xcrun swiftc -O -target arm64-apple-macosx15.0 -o .build/storecheck \
     Shared/ParsedTransaction.swift \
     Shared/SMSParser.swift \
     Shared/MerchantFormat.swift Shared/LearnedParsing.swift Shared/MessageLogging.swift Shared/ExtensionSnapshot.swift Shared/ExpenseSearch.swift \
