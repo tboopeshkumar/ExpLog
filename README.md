@@ -191,8 +191,11 @@ place in that bank's later alerts. It works like this
 - A pattern is only kept if it reads the picked words back out of the message
   it came from. Picking again in the same format replaces the old one.
 
-Settings → Message formats lists them, each with its message and the merchant
-highlighted; swipe to forget one. The share extension can't see these when
+Settings → Message formats lists them, each named by how its messages open
+("Debit Card…"), with the message, the merchant highlighted, and how many
+logged expenses it matches. A format's page has a field to try another of the
+bank's messages against it, "Pick the Merchant Again" to correct it from the
+same sample, and Forget Format. The share extension can't see these when
 there's no App Group, so the app reads the message again with them when the
 expense arrives, unless you typed or picked a merchant in the share sheet.
 

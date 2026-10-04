@@ -11,11 +11,15 @@ struct MerchantPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selection: ClosedRange<Int>?
     @State private var remember = true
+    /// Off when correcting a format that's already remembered.
+    private let asksToRemember: Bool
 
     private let words: [MerchantFormat.Word]
 
-    init(message: String, current: String, onPick: @escaping (ClosedRange<Int>, Bool) -> Void) {
+    init(message: String, current: String, asksToRemember: Bool = true,
+         onPick: @escaping (ClosedRange<Int>, Bool) -> Void) {
         self.message = message
+        self.asksToRemember = asksToRemember
         self.onPick = onPick
         let words = MerchantFormat.words(of: message)
         self.words = words
@@ -45,9 +49,13 @@ struct MerchantPickerView: View {
                         Text(preview ?? "—")
                             .foregroundStyle(preview == nil ? .secondary : .primary)
                     }
-                    Toggle("Remember for messages like this", isOn: $remember)
+                    if asksToRemember {
+                        Toggle("Remember for messages like this", isOn: $remember)
+                    }
                 } footer: {
-                    Text("ExpLog will read the merchant from the same place in this bank's future messages, and name and categorise it the way you save this one.")
+                    if asksToRemember {
+                        Text("ExpLog will read the merchant from the same place in this bank's future messages, and name and categorise it the way you save this one.")
+                    }
                 }
             }
             .navigationTitle("Pick merchant")

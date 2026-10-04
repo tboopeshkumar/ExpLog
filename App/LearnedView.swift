@@ -303,6 +303,7 @@ private struct MerchantEditor: View {
 struct MessageFormatsView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \MessageFormat.createdAt, order: .reverse) private var formats: [MessageFormat]
+    @Query(filter: #Predicate<Transaction> { $0.rawMessage != nil }) private var fromMessages: [Transaction]
 
     var body: some View {
         List {
@@ -310,39 +311,178 @@ struct MessageFormatsView: View {
                 ContentUnavailableView {
                     Label("No message formats", systemImage: "text.viewfinder")
                 } description: {
-                    Text("Merchant misread? Tap \(Image(systemName: "text.viewfinder")) beside Merchant and pick it from the message.")
+                    Text("Merchant misread? Open the expense, tap \(Image(systemName: "text.viewfinder")) beside Merchant and pick it from the message. ExpLog remembers where to look.")
                 }
             } else {
-                Section {
-                    ForEach(formats) { format in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(Self.highlighting(format.picked, in: format.sample))
-                                .font(.footnote)
-                            Text("Merchant: \(format.picked) · learned \(format.createdAt.formatted(.dateTime.day().month(.abbreviated)))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                // A card each: they're few, and each is a block of text.
+                ForEach(formats) { format in
+                    Section {
+                        NavigationLink {
+                            MessageFormatDetail(format: format)
+                        } label: {
+                            MessageFormatRow(format: format, matches: Self.matches(format, in: fromMessages))
                         }
-                        .padding(.vertical, 2)
+                        .accessibilityIdentifier("formatRow")
+                        .swipeActions(edge: .trailing) {
+                            Button("Forget", role: .destructive) {
+                                context.delete(format)
+                                try? context.save()
+                            }
+                        }
                     }
-                    .onDelete { offsets in
-                        offsets.map { formats[$0] }.forEach(context.delete)
-                        try? context.save()
-                    }
+                }
+                Section {
                 } footer: {
-                    Text("The merchant is read from the highlighted words. Swipe to forget.")
+                    Text("Messages shaped like these have their merchant read from the highlighted words. Other messages are read the usual way.")
                 }
             }
         }
+        .listSectionSpacing(.compact)
         .navigationTitle("Message formats")
     }
 
-    private static func highlighting(_ picked: String, in sample: String) -> AttributedString {
+    /// How many logged expenses came from messages in this format.
+    static func matches(_ format: MessageFormat, in transactions: [Transaction]) -> Int {
+        transactions.filter { transaction in
+            transaction.rawMessage.map { MerchantFormat.merchant(in: $0, pattern: format.pattern) != nil } ?? false
+        }.count
+    }
+
+    /// A name for a format: how its messages open, up to the first part that
+    /// changes — "Debit Card", "Thank you for using".
+    static func title(of format: MessageFormat) -> String {
+        let opening = format.sample.split(separator: " ")
+            .prefix { !$0.contains(where: \.isNumber) }
+            .prefix(4)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .punctuationCharacters)
+        return opening.isEmpty ? "Message format" : opening + "…"
+    }
+
+    /// The sample with the merchant's words picked out: bold, in the tint
+    /// colour, on a wash of it.
+    static func highlighting(_ picked: String, in sample: String) -> AttributedString {
         var text = AttributedString(sample)
-        if let range = text.range(of: picked) {
-            text[range].font = .footnote.bold()
+        // Without the comma or full stop the pick ended on.
+        let words = picked.trimmingCharacters(in: CharacterSet(charactersIn: ",.;:"))
+        if let range = text.range(of: words) {
+            text[range].inlinePresentationIntent = .stronglyEmphasized
             text[range].foregroundColor = .accentColor
+            text[range].backgroundColor = .accentColor.opacity(0.15)
         }
         return text
+    }
+
+    /// The merchant a format reads from its own sample, as it would be shown.
+    static func reading(of format: MessageFormat) -> String {
+        MerchantFormat.merchant(in: format.sample, pattern: format.pattern) ?? format.picked
+    }
+}
+
+/// A format in the list: how its messages open, the sample with the merchant
+/// highlighted, and what it reads.
+private struct MessageFormatRow: View {
+    let format: MessageFormat
+    let matches: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(MessageFormatsView.title(of: format))
+                .font(.body.weight(.medium))
+                .lineLimit(1)
+            Text(MessageFormatsView.highlighting(format.picked, in: format.sample))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(4)
+            Text("Reads “\(MessageFormatsView.reading(of: format))”"
+                 + (matches > 0 ? " · \(matches == 1 ? "1 expense" : "\(matches) expenses")" : ""))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+/// One format: its sample, what it reads, a place to try another message
+/// against it, picking the merchant again, and forgetting it.
+private struct MessageFormatDetail: View {
+    @Bindable var format: MessageFormat
+
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Query(filter: #Predicate<Transaction> { $0.rawMessage != nil }) private var fromMessages: [Transaction]
+    @State private var trial = ""
+    @State private var picking = false
+    @State private var pickFailed = false
+
+    var body: some View {
+        let matches = MessageFormatsView.matches(format, in: fromMessages)
+        Form {
+            Section("Learned from") {
+                Text(MessageFormatsView.highlighting(format.picked, in: format.sample))
+                    .font(.footnote)
+                    .textSelection(.enabled)
+            }
+
+            Section {
+                LabeledContent("Reads", value: MessageFormatsView.reading(of: format))
+                LabeledContent("Learned", value: format.createdAt.formatted(.dateTime.day().month(.abbreviated).year()))
+                LabeledContent("Expenses", value: "\(matches)")
+            }
+
+            Section {
+                TextField("Paste another message", text: $trial, axis: .vertical)
+                    .lineLimit(2...8)
+                    .font(.footnote)
+                    .accessibilityIdentifier("trialMessage")
+                if !trial.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if let merchant = MerchantFormat.merchant(in: trial, pattern: format.pattern) {
+                        Label("Reads “\(merchant)”", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    } else {
+                        Label("Not this format", systemImage: "xmark.circle")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Try a message")
+            } footer: {
+                Text("See what this format reads from another of the bank's messages.")
+            }
+
+            Section {
+                Button("Pick the Merchant Again") { picking = true }
+                Button("Forget Format", role: .destructive) {
+                    context.delete(format)
+                    try? context.save()
+                    dismiss()
+                }
+            }
+        }
+        .navigationTitle("Message format")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $picking) {
+            MerchantPickerView(message: format.sample, current: MessageFormatsView.reading(of: format),
+                               asksToRemember: false) { words, _ in
+                repick(words)
+            }
+        }
+        .alert("Couldn't learn that", isPresented: $pickFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("ExpLog couldn't work out where those words are in this message. The format is unchanged.")
+        }
+    }
+
+    /// Correct where the merchant is, from the same sample.
+    private func repick(_ words: ClosedRange<Int>) {
+        guard let pattern = MerchantFormat.pattern(from: format.sample, picking: words) else {
+            pickFailed = true
+            return
+        }
+        format.pattern = pattern
+        format.picked = MerchantFormat.words(of: format.sample)[words].map(\.text).joined(separator: " ")
+        try? context.save()
     }
 }
 
