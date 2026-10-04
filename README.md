@@ -25,14 +25,27 @@ picks the route at runtime, in `SharedStore.isAppGroupAvailable`:
 | Store | One database in the App Group | The app's own container |
 | On Save | Extension writes it directly | Extension queues it in a shared keychain group |
 | Appears in the app | Immediately | Next time ExpLog opens |
-| Card + category prefill | In the form | Applied by the app on import |
+| Card + category prefill | In the form | In the form, from a snapshot the app leaves |
 
 You stay in Messages either way. The free path is `Shared/SharedInbox.swift`:
 free team provisioning profiles grant keychain access to `<team>.*`, so a
 shared keychain group works where an App Group doesn't. (Opening the app from
 the extension isn't an option — iOS refuses `NSExtensionContext.open` from a
-share extension.) Nothing needs rewriting if you enroll later — the App Group
-route switches itself back on.
+share extension.)
+
+The same keychain group carries the other direction too. Each time the app
+leaves the foreground it writes a snapshot (`Shared/ExtensionSnapshot.swift`):
+categories and subcategories, cards with their keywords, remembered merchants,
+learned message formats and the currency settings. The share sheet loads it
+into its own scratch store before showing the form, so it reads and matches a
+message as the app would and offers the category and card lists. What's
+chosen travels back by name in `TransactionLink`, and the app finds its own
+objects; leaving a field empty in the sheet is respected. Until the app has
+been opened once, the sheet has no snapshot and the app fills those in on
+import, as before. Covered by `check-store.sh`.
+
+Nothing needs rewriting if you enroll later — the App Group route switches
+itself back on.
 
 ## The parser
 

@@ -25,6 +25,10 @@ public struct TransactionFormView: View {
     /// be empty. The app fills both in on receipt.
     private let showsCategoryAndAccount: Bool
 
+    /// Off where a card made in the form couldn't be kept: the share sheet
+    /// working from a copy of the app's cards.
+    private let canAddCard: Bool
+
     @State private var showRawMessage = false
     @State private var pickingMerchant = false
     /// What happened to the last pick, shown under the merchant.
@@ -43,6 +47,7 @@ public struct TransactionFormView: View {
     public init(
         draft: TransactionDraft,
         showsCategoryAndAccount: Bool = true,
+        canAddCard: Bool = true,
         saveAction: ((TransactionDraft) throws -> Void)? = nil,
         onSave: @escaping () -> Void,
         onCancel: @escaping () -> Void
@@ -52,6 +57,7 @@ public struct TransactionFormView: View {
             ? ""
             : draft.amount.formatted(.number.grouping(.never).precision(.fractionLength(0...3))))
         self.showsCategoryAndAccount = showsCategoryAndAccount
+        self.canAddCard = canAddCard
         self.saveAction = saveAction
         self.onSave = onSave
         self.onCancel = onCancel
@@ -69,7 +75,7 @@ public struct TransactionFormView: View {
             }
             // Not offered for a card too short to be a safe keyword (a bare
             // "ending 453"); that one's set up in Settings with more context.
-            if showsCategoryAndAccount, draft.account == nil,
+            if showsCategoryAndAccount, canAddCard, draft.account == nil,
                let card = draft.parsedCard, card.count >= AccountMatching.minimumKeywordLength {
                 linkCardSection
             }
@@ -308,7 +314,7 @@ public struct TransactionFormView: View {
                     Text(pickNote)
                 }
                 if !showsCategoryAndAccount {
-                    Text("Card, category and learned merchant names are filled in by ExpLog when it opens.")
+                    Text("ExpLog fills in the card and category when it opens. Open it once, and you can choose them here.")
                 }
             }
         }

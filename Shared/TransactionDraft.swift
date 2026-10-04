@@ -51,6 +51,11 @@ public final class TransactionDraft {
     }
     public var pickedFormat: PickedFormat?
 
+    /// Set by the share sheet when it had the app's categories and cards
+    /// (ExtensionSnapshot): its category and card are then the user's choice,
+    /// "none" included, rather than blanks for the app to fill in.
+    public var resolvedInExtension = false
+
     /// The transaction being edited, when editing rather than creating.
     private var existing: Transaction?
 

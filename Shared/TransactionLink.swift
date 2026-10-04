@@ -25,6 +25,10 @@ public enum TransactionLink {
         static let raw = "raw"
         static let format = "format"
         static let picked = "picked"
+        static let known = "known"
+        static let category = "category"
+        static let subcategory = "subcategory"
+        static let account = "account"
     }
 
     // MARK: - Encode
@@ -51,6 +55,15 @@ public enum TransactionLink {
         if let format = draft.pickedFormat {
             items.append(URLQueryItem(name: Key.format, value: format.pattern))
             items.append(URLQueryItem(name: Key.picked, value: format.picked))
+        }
+
+        // Chosen in a share sheet that had the app's categories and cards:
+        // sent by name, for the app to find its own.
+        if draft.resolvedInExtension {
+            items.append(URLQueryItem(name: Key.known, value: "1"))
+            if let category = draft.category { items.append(URLQueryItem(name: Key.category, value: category.name)) }
+            if let subcategory = draft.subcategory { items.append(URLQueryItem(name: Key.subcategory, value: subcategory.name)) }
+            if let account = draft.account { items.append(URLQueryItem(name: Key.account, value: account.name)) }
         }
 
         components.queryItems = items
@@ -117,6 +130,25 @@ public enum TransactionLink {
                     draft.subcategory = alias.subcategory
                     if unedited, !alias.displayName.isEmpty { draft.merchant = alias.displayName }
                 }
+            }
+        }
+
+        // The share sheet showed the app's categories and cards, so what it
+        // sent is what was chosen there — leaving one empty included.
+        if values[Key.known] == "1" {
+            let same: (String, String) -> Bool = { $0.caseInsensitiveCompare($1) == .orderedSame }
+            let categories = (try? context.fetch(FetchDescriptor<ExpenseCategory>())) ?? []
+            let category = values[Key.category].flatMap { name in categories.first { same($0.name, name) } }
+            draft.category = category
+            draft.subcategory = values[Key.subcategory].flatMap { name in
+                category?.sortedSubcategories.first { same($0.name, name) }
+            }
+            if let name = values[Key.account] {
+                let accounts = (try? context.fetch(FetchDescriptor<Account>())) ?? []
+                // Renamed or deleted since: keep the keyword match above.
+                if let account = accounts.first(where: { same($0.name, name) }) { draft.account = account }
+            } else {
+                draft.account = nil
             }
         }
 

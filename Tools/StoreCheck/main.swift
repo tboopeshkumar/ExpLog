@@ -948,6 +948,57 @@ func run() throws {
     let future = MonthTrend.windowEnd(for: day(11, 1), now: trendNow, calendar: calendar)
     expect(future == Formatting.monthStart(day(11, 1), calendar: calendar), "a future month ends the window too")
 
+    print("\nSHARE SHEET SNAPSHOT  (categories and cards without a shared database)\n")
+
+    // The app's side: `learn` has Shopping › Online, the ShopNova merchant
+    // and a learned format. Add a card, then snapshot it.
+    learn.insert(Account(name: "Harbour Debit", matchKeywords: ["XX5528"]))
+    try learn.save()
+    let snapshot = ExtensionSnapshot(context: learn)
+    let wire = try JSONDecoder().decode(ExtensionSnapshot.self, from: JSONEncoder().encode(snapshot))
+    expect(wire == snapshot, "the snapshot survives encoding")
+    expect(wire.categories.first { $0.name == "Shopping" }?.subcategories == ["Online"], "categories carry their subcategories")
+    expect(wire.cards.contains { $0.name == "Harbour Debit" && $0.keywords == ["XX5528"] }, "cards carry their keywords")
+    expect(!wire.formats.isEmpty, "learned formats are included")
+
+    // The share sheet's side: its own empty store takes the snapshot on.
+    let sheetURL = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: "ExpLogSheet-\(UUID().uuidString).store")
+    defer { try? FileManager.default.removeItem(at: sheetURL) }
+    let sheet = ModelContext(try ModelContainer(
+        for: SharedStoreSchema.schema,
+        configurations: [ModelConfiguration(schema: SharedStoreSchema.schema, url: sheetURL)]
+    ))
+    wire.apply(to: sheet)
+    wire.apply(to: sheet)
+    expect(try sheet.fetchCount(FetchDescriptor<ExpenseCategory>()) == wire.categories.count
+               && sheet.fetchCount(FetchDescriptor<Account>()) == wire.cards.count,
+           "applying it twice leaves one copy of everything")
+
+    let sheetAlert = "Debit Card XX5528 linked to account XX660213 was used for AED61.00 on Oct 6 2026 9:30AM at SHOPNOVAUFR DI, AE. Available Balance AED 4061.40"
+    let asTheApp = TransactionDraft(parsed: LearnedParsing.parse(sheetAlert, in: learn)!, context: learn)
+    let sheetDraft = TransactionDraft(parsed: LearnedParsing.parse(sheetAlert, in: sheet)!, context: sheet)
+    sheetDraft.resolvedInExtension = true
+    expect(sheetDraft.account?.name == "Harbour Debit", "the sheet matches the card by keyword", sheetDraft.account?.name ?? "nil")
+    expect(sheetDraft.merchant == asTheApp.merchant && sheetDraft.category?.name == asTheApp.category?.name
+               && sheetDraft.subcategory?.name == asTheApp.subcategory?.name,
+           "…and reads the merchant and its category as the app would",
+           "\(sheetDraft.merchant) \(sheetDraft.category?.name ?? "-") vs \(asTheApp.merchant) \(asTheApp.category?.name ?? "-")")
+
+    // Chosen in the sheet, sent by name, found again in the app's store.
+    let sheetDining = try sheet.fetch(FetchDescriptor<ExpenseCategory>()).first { $0.name == "Dining" }
+    sheetDraft.category = sheetDining
+    let backInApp = TransactionLink.url(for: sheetDraft).flatMap { TransactionLink.draft(from: $0, context: learn) }
+    let appDining = try learn.fetch(FetchDescriptor<ExpenseCategory>()).first { $0.name == "Dining" }
+    expect(backInApp?.category === appDining && appDining != nil, "a category chosen in the sheet arrives as the app's own",
+           backInApp?.category?.name ?? "nil")
+    expect(backInApp?.account?.name == "Harbour Debit", "…and so does the card")
+
+    sheetDraft.category = nil
+    sheetDraft.account = nil
+    let cleared = TransactionLink.url(for: sheetDraft).flatMap { TransactionLink.draft(from: $0, context: learn) }
+    expect(cleared != nil && cleared?.category == nil && cleared?.account == nil,
+           "leaving them empty in the sheet is respected, not filled back in")
+
     print("")
     if failures == 0 {
         print("All checks passed.\n")

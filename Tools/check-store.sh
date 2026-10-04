@@ -8,7 +8,7 @@ mkdir -p .build
 xcrun swiftc -target arm64-apple-macosx15.0 -o .build/storecheck \
     Shared/ParsedTransaction.swift \
     Shared/SMSParser.swift \
-    Shared/MerchantFormat.swift Shared/LearnedParsing.swift Shared/MessageLogging.swift \
+    Shared/MerchantFormat.swift Shared/LearnedParsing.swift Shared/MessageLogging.swift Shared/ExtensionSnapshot.swift \
     Shared/Formatting.swift \
     Shared/SeedData.swift \
     Shared/TransactionDraft.swift Shared/TransactionLink.swift Shared/MonthSummary.swift Shared/MonthIndex.swift Shared/CSV.swift Shared/AccountMatching.swift Shared/Currency.swift Shared/CurrencySettings.swift Shared/ExchangeRates.swift Shared/SharedStore.swift \
