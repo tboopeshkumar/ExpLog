@@ -319,7 +319,8 @@ private struct MainCurrencyPicker: View {
                 }
             }
         }
-        .searchable(text: $search, prompt: "Code or name")
+        // Always showing: pulling down to find it isn't obvious on a short page.
+        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Code or name")
         .overlay {
             if !search.isEmpty, !(used + others).contains(where: matches) {
                 ContentUnavailableView.search(text: search)

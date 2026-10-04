@@ -424,7 +424,15 @@ its total and the expenses grouped by day (each day with its own total). The
 ‹ › arrows step a month; tapping the month's name opens a list of every month
 that has expenses, by year with their totals, to jump straight to one, and
 "This month" comes back. Future-dated expenses (instalments) sit in their own
-months, one tap forward. Search covers every month.
+months, one tap forward.
+
+Search covers every month. Every word typed must match something about the
+expense: merchant, note, category or subcategory, card, reference, currency
+code, an amount ("72" finds 72.xx, "72.5" finds 72.5x), a month ("sep") or a
+year, or "uncategorised". Results show how many and their total, grouped by
+month; a month's heading opens that month. With the field empty, categories
+are offered as one-tap suggestions. Rules in `Shared/ExpenseSearch.swift`,
+covered by `check-store.sh`.
 
 Expenses and Summary share the chosen month, so switching tabs keeps your
 place. Only that month's expenses are fetched (plus the first and last, for

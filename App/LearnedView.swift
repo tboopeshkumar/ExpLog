@@ -55,7 +55,7 @@ struct MerchantsView: View {
                 }
             }
         }
-        .searchable(text: $search, prompt: "Search merchants")
+        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search merchants")
         .navigationTitle("Merchants")
         .toolbar {
             if aliases.count > 1 {

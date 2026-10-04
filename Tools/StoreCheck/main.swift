@@ -999,6 +999,28 @@ func run() throws {
     expect(cleared != nil && cleared?.category == nil && cleared?.account == nil,
            "leaving them empty in the sheet is respected, not filled back in")
 
+    print("\nSEARCH\n")
+
+    let searchCard = Account(name: "Harbour Debit")
+    let taxiRide = Transaction(amount: Decimal(string: "72.57")!, currencyCode: "AED", date: day(9, 27), merchant: "Aman Taxi",
+                               note: "airport run", reference: "R77315")
+    taxiRide.account = searchCard
+    let bigShop = Transaction(amount: 720, currencyCode: "INR", date: day(3, 2), merchant: "Mega Mart")
+    func finds(_ query: String, _ transaction: Transaction) -> Bool {
+        ExpenseSearch.matches(transaction, query: query, calendar: calendar)
+    }
+    expect(finds("aman", taxiRide) && finds("AIRPORT", taxiRide) && finds("harbour", taxiRide) && finds("r773", taxiRide),
+           "merchant, note, card and reference, ignoring case")
+    expect(finds("taxi airport", taxiRide) && !finds("taxi dinner", taxiRide), "every word must match")
+    expect(finds("72", taxiRide) && finds("72.5", taxiRide) && finds("72.57", taxiRide), "an amount, whole or to the fils")
+    expect(!finds("72", bigShop) && finds("720", bigShop), "72 isn't 720")
+    expect(finds("sep", taxiRide) && finds("september", taxiRide) && finds("2026", taxiRide) && !finds("oct", taxiRide),
+           "a month's name or a year")
+    expect(finds("mar", bigShop) && finds("mart", bigShop), "\"mar\" finds March, \"mart\" the merchant")
+    expect(finds("inr", bigShop) && !finds("inr", taxiRide), "a currency code")
+    expect(finds("uncat", bigShop) && finds("uncategorized", taxiRide), "uncategorised, either spelling")
+    expect(!finds("", taxiRide) && !finds("   ", taxiRide), "nothing typed matches nothing")
+
     print("")
     if failures == 0 {
         print("All checks passed.\n")

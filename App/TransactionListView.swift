@@ -12,6 +12,9 @@ struct TransactionListView: View {
     @State private var categorising: Transaction?
     @State private var searchText = ""
     @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
+    /// Offered as suggestions when the search field is empty.
+    @Query(filter: #Predicate<ExpenseCategory> { !$0.isArchived }, sort: \ExpenseCategory.sortOrder)
+    private var categories: [ExpenseCategory]
 
     private var actions: RowActions {
         RowActions(
@@ -29,11 +32,31 @@ struct TransactionListView: View {
                     // A fresh view per month: its own query, scrolled to the top.
                     .id(month)
             } else {
-                SearchResults(searchText: searchText, mainCurrency: mainCurrency, actions: actions)
+                SearchResults(searchText: searchText, mainCurrency: mainCurrency, actions: actions) { start in
+                    // From a result's month heading: that month, in full.
+                    month = start
+                    searchText = ""
+                }
             }
         }
         .navigationTitle("Expenses")
         .searchable(text: $searchText, prompt: "Search all months")
+        .searchSuggestions {
+            // Before anything's typed: one tap to a category, or to what
+            // still needs one.
+            if searchText.isEmpty {
+                Label("Uncategorised", systemImage: "tag")
+                    .searchCompletion("Uncategorised")
+                ForEach(categories) { category in
+                    Label {
+                        Text(category.name)
+                    } icon: {
+                        Image(systemName: category.symbol).foregroundStyle(category.tint)
+                    }
+                    .searchCompletion(category.name)
+                }
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Add", systemImage: "plus") {
@@ -211,50 +234,76 @@ private struct MonthLedger: View {
 
 }
 
-/// Search results from every month, grouped by month, newest first.
+/// Search results from every month: how many and what they come to, then
+/// the matches grouped by month, newest first. A month's heading opens that
+/// month.
 private struct SearchResults: View {
     let searchText: String
     let mainCurrency: String
     let actions: RowActions
+    let openMonth: (Date) -> Void
 
     @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
-
-    private var matches: [Transaction] {
-        let needle = searchText.lowercased()
-        return transactions.filter {
-            $0.merchant.lowercased().contains(needle)
-                || $0.note.lowercased().contains(needle)
-                || ($0.category?.name.lowercased().contains(needle) ?? false)
-                || ($0.subcategory?.name.lowercased().contains(needle) ?? false)
-        }
-    }
+    @Environment(\.dismissSearch) private var dismissSearch
 
     var body: some View {
-        let matches = matches
+        let matches = transactions.filter { ExpenseSearch.matches($0, query: searchText) }
         let months = Dictionary(grouping: matches) { Formatting.monthStart($0.date) }
             .map { (start: $0.key, items: $0.value) }
             .sorted { $0.start > $1.start }
         List {
+            if !matches.isEmpty {
+                Section {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(matches.count == 1 ? "1 expense" : "\(matches.count) expenses")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Formatting.mainTotalText(of: matches, main: mainCurrency)
+                            .font(.headline)
+                            .monospacedDigit()
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("searchSummary")
+                }
+            }
             ForEach(months, id: \.start) { month in
                 Section {
                     ForEach(month.items) { transaction in
                         ExpenseRowButton(transaction: transaction, actions: actions)
                     }
                 } header: {
-                    HStack {
-                        Text(Formatting.monthTitle(month.start))
-                        Spacer()
-                        Formatting.mainTotalText(of: month.items, main: mainCurrency)
-                            .monospacedDigit()
+                    Button {
+                        dismissSearch()
+                        openMonth(month.start)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(Formatting.monthTitle(month.start))
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.tertiary)
+                            Spacer()
+                            Formatting.mainTotalText(of: month.items, main: mainCurrency)
+                                .monospacedDigit()
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .contentShape(.rect)
                     }
-                    .font(.subheadline.weight(.semibold))
+                    .buttonStyle(.plain)
                     .textCase(nil)
+                    .accessibilityHint("Opens this month")
+                    .accessibilityIdentifier("searchMonth")
                 }
             }
         }
+        .listSectionSpacing(.compact)
         .overlay {
             if matches.isEmpty {
-                ContentUnavailableView.search(text: searchText)
+                ContentUnavailableView {
+                    Label("No results for “\(searchText)”", systemImage: "magnifyingglass")
+                } description: {
+                    Text("Try a merchant, category, card, amount or month.")
+                }
             }
         }
     }
