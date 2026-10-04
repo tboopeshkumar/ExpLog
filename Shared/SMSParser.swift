@@ -40,6 +40,22 @@ public enum SMSParser {
 
     // MARK: - Rejection
 
+    /// Why a message isn't logged.
+    public enum Rejection: Equatable, Sendable {
+        /// An OTP, a declined or scheduled payment, a statement notice.
+        case notAPayment
+        /// No currency and amount to log.
+        case noAmount
+    }
+
+    /// Why `parse` returns nil for `text`, or nil when it would be read.
+    public static func rejection(of text: String) -> Rejection? {
+        let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty else { return nil }
+        if isNonTransaction(message) { return .notAPayment }
+        return matchAmount(in: message) == nil ? .noAmount : nil
+    }
+
     /// Messages that mention money but are not a completed card transaction.
     private static let rejectPatterns = [
         #"\bOTP\b"#,

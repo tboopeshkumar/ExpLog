@@ -240,6 +240,11 @@ for (label, message) in mustReject {
     }
 }
 
+print("\nWHY A MESSAGE ISN'T LOGGED\n")
+check("OTP", SMSParser.rejection(of: "Your OTP for transaction of AED 250.00 is 884213."), .notAPayment, indent: "  ")
+check("no amount", SMSParser.rejection(of: "Dear Customer, your card XXXX4417 has been activated successfully."), .noAmount, indent: "  ")
+check("a payment", SMSParser.rejection(of: "Your card XXXX4417 was used at HARBOR BOOKS NYC for USD 42.10 on 18-Sep."), nil, indent: "  ")
+
 print("\nLEARNED MERCHANT FORMATS\n")
 
 // The user picks the merchant's words in one message; the next message in

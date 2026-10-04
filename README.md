@@ -109,7 +109,12 @@ learning, duplicate detection, totals — the same path the share extension runs
 when you tap Save.
 
 On-device, Settings → Test message parsing does the same as the first one
-interactively: paste a message, see exactly which fields were read.
+interactively. Paste a message (or tap Example) and it shows how the expense
+would be logged, each field with a tick or a "Not found", and what it was
+matched to: the card by keyword, the remembered merchant and category, and
+whether a learned format read the merchant. A message that isn't logged says
+why — not a card payment, or no amount (`SMSParser.rejection(of:)`). Log This
+Expense opens the result in the form.
 
 ## Categories
 
