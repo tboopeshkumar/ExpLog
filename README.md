@@ -167,9 +167,10 @@ Rules in `Shared/AccountMatching.swift`, covered by `check-store.sh`.
 `MerchantAlias`: the merchant as read from the message, the name you gave it,
 its category and subcategory. The next alert from the same place arrives
 already named and categorised. No training step — it just gets quieter over
-time. Settings → Merchants lists what's remembered; tap one to rename it or
-change its category (for future messages; logged expenses keep theirs), swipe
-to forget it.
+time. Settings → Merchants lists what's remembered, each with its category
+and how many expenses it has, sorted by name, most expenses or most recently
+used. Tap one to rename it or change its category (for future messages;
+logged expenses keep theirs); swipe, or Forget Merchant, to drop it.
 
 **Where the merchant is.** When a bank writes its alerts in a way the parser
 misreads, the button beside Merchant in the form (shown when the expense came
