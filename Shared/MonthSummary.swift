@@ -245,3 +245,49 @@ public enum MonthPace {
         return NSDecimalNumber(decimal: (current - previous) / previous).doubleValue
     }
 }
+
+// MARK: - Trend
+
+/// A run of months' totals, for the small trend chart on a category's or
+/// merchant's page.
+public enum MonthTrend {
+
+    public struct Point: Identifiable, Equatable {
+        public let month: Date
+        /// In the main currency; expenses with no rate aren't counted.
+        public let total: Decimal
+
+        public var id: Date { month }
+    }
+
+    /// The last month the chart shows. The window holds still while you step
+    /// around recent months — it ends at this month for any of the last
+    /// `count` — and only follows the selection beyond that: to an older
+    /// month, or a future one.
+    public static func windowEnd(for selected: Date, count: Int = 6, now: Date = .now,
+                                 calendar: Calendar = .current) -> Date {
+        let thisMonth = Formatting.monthStart(now, calendar: calendar)
+        let month = Formatting.monthStart(selected, calendar: calendar)
+        guard let oldest = calendar.date(byAdding: .month, value: -(count - 1), to: thisMonth) else { return month }
+        return (month > thisMonth || month < oldest) ? month : thisMonth
+    }
+
+    /// `count` months of totals ending at the window's end, oldest first;
+    /// months with nothing are zero, so the bars keep their places.
+    public static func points(
+        of transactions: [Transaction],
+        selected: Date,
+        count: Int = 6,
+        mainCurrency: String = Currency.main,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [Point] {
+        let end = windowEnd(for: selected, count: count, now: now, calendar: calendar)
+        let byMonth = Dictionary(grouping: transactions) { Formatting.monthStart($0.date, calendar: calendar) }
+        return (0..<count).reversed().compactMap { back in
+            guard let month = calendar.date(byAdding: .month, value: -back, to: end) else { return nil }
+            let total = Currency.mainTotal(of: byMonth[month] ?? [], main: mainCurrency).total
+            return Point(month: month, total: total)
+        }
+    }
+}

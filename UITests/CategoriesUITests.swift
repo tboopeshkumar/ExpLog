@@ -17,6 +17,12 @@ final class CategoriesUITests: XCTestCase {
 
     func testAddingEditingAndDeletingACategory() throws {
         sleep(1)
+        // Left behind if an earlier run was cut short.
+        let leftover = app.staticTexts["Dining Out"]
+        if leftover.exists {
+            leftover.swipeLeft()
+            app.buttons["Delete"].firstMatch.tap()
+        }
         snapshot("1 categories")
         app.navigationBars["Categories"].buttons["Add Category"].tap()
         XCTAssertTrue(app.navigationBars["New Category"].waitForExistence(timeout: 3))

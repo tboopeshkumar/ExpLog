@@ -157,7 +157,7 @@ private struct MonthLedger: View {
                     }
                 } header: {
                     HStack {
-                        Text(Self.dayTitle(day.day))
+                        Text(Formatting.dayTitle(day.day))
                         Spacer()
                         Formatting.mainTotalText(of: day.items, main: mainCurrency)
                             .monospacedDigit()
@@ -209,13 +209,6 @@ private struct MonthLedger: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// "Today", "Yesterday", else "Mon, 28 Sep".
-    static func dayTitle(_ day: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(day) { return "Today" }
-        if calendar.isDateInYesterday(day) { return "Yesterday" }
-        return day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
-    }
 }
 
 /// Search results from every month, grouped by month, newest first.
@@ -273,6 +266,8 @@ struct TransactionRow: View {
     var showsDate = true
     /// Off on a category's own page: only a subcategory is worth saying.
     var showsCategory = true
+    /// Off on a subcategory's own page.
+    var showsSubcategory = true
 
     @AppStorage("mainCurrency", store: Currency.defaults) private var mainCurrency: String = Currency.main
 
@@ -291,7 +286,7 @@ struct TransactionRow: View {
         if showsDate { parts.append(Text(transaction.date.formatted(.dateTime.day().month(.abbreviated)))) }
         if let category = transaction.category {
             if let subcategory = transaction.subcategory {
-                parts.append(Text(subcategory.name))
+                if showsSubcategory { parts.append(Text(subcategory.name)) }
             } else if showsCategory {
                 parts.append(Text(category.name))
             }

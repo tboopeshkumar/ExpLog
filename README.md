@@ -419,9 +419,16 @@ to today — an instalment due later doesn't inflate the pace — and the
 comparison is with the same days of last month ("vs 1–3 Sep"), so an early
 month isn't set against a whole one. Rules in `MonthPace`
 (`Shared/MonthSummary.swift`), covered by `check-store.sh`.
-Tapping a category opens its month — its total and share of the month, then a
-breakdown by subcategory and by merchant
-(top five, then "Show all"), then the expenses. Tapping a merchant lists its
+Tapping a category opens its page: the same month switcher as Summary (they
+share the month, so stepping here keeps your place there), the month's total
+and share, the comparison with the month before, and six months of it as a
+small bar chart — the month on screen at full strength, tap a bar to go to
+that month. The window ends at this month and only moves for an older or
+future one (`MonthTrend`, covered by `check-store.sh`). The chart is one hue
+with no legend or per-bar values: it's one series, named by the page title,
+and the month's figure is the total above it. Below: a
+breakdown by subcategory (each opens its own page) and by merchant
+(top five, then "Show all"), then the expenses by day. Tapping a merchant lists its
 expenses. Merchant names group ignoring case and extra spaces, shown under the
 most common spelling; different names stay separate rather than being merged
 on a guess. The totals come from `Shared/MonthSummary.swift`, which is

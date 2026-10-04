@@ -5,6 +5,14 @@ public enum Formatting {
         amount.formatted(.currency(code: code).precision(.fractionLength(2)))
     }
 
+    /// "Today", "Yesterday", else "Mon, 28 Sep": the heading over a day's
+    /// expenses.
+    public static func dayTitle(_ day: Date, calendar: Calendar = .current) -> String {
+        if calendar.isDateInToday(day) { return "Today" }
+        if calendar.isDateInYesterday(day) { return "Yesterday" }
+        return day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+    }
+
     public static func monthTitle(_ date: Date) -> String {
         date.formatted(.dateTime.month(.wide).year())
     }

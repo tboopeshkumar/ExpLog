@@ -925,6 +925,29 @@ func run() throws {
     expect(MonthPace.change(from: 100, to: 118).map { abs($0 - 0.18) < 0.0001 } == true, "18% more")
     expect(MonthPace.change(from: 0, to: 50) == nil, "nothing last month: no comparison")
 
+    print("\nMONTH TREND  (six months of a category or merchant)\n")
+
+    let trendNow = day(9, 20)
+    let trendItems: [Transaction] = [
+        Transaction(amount: 40, currencyCode: "AED", date: day(9, 3), merchant: "a"),
+        Transaction(amount: 10, currencyCode: "AED", date: day(9, 9), merchant: "a"),
+        Transaction(amount: 25, currencyCode: "AED", date: day(7, 15), merchant: "a"),
+        Transaction(amount: 99, currencyCode: "AED", date: day(1, 15), merchant: "a"),
+    ]
+    let trend = MonthTrend.points(of: trendItems, selected: day(9, 1), mainCurrency: "AED", now: trendNow, calendar: calendar)
+    expect(trend.count == 6 && trend.first?.month == Formatting.monthStart(day(4, 1), calendar: calendar)
+               && trend.last?.month == Formatting.monthStart(day(9, 1), calendar: calendar),
+           "six months, oldest first, ending this month")
+    expect(trend.map(\.total) == [0, 0, 0, 25, 0, 50], "each month's total, zero where there's nothing",
+           trend.map { "\($0.total)" }.joined(separator: " "))
+    let steppedBack = MonthTrend.points(of: trendItems, selected: day(7, 1), mainCurrency: "AED", now: trendNow, calendar: calendar)
+    expect(steppedBack == trend, "stepping to a recent month leaves the chart where it is")
+    let olderWindow = MonthTrend.points(of: trendItems, selected: day(1, 1), mainCurrency: "AED", now: trendNow, calendar: calendar)
+    expect(olderWindow.last?.month == Formatting.monthStart(day(1, 1), calendar: calendar) && olderWindow.last?.total == 99,
+           "an older month moves the window to end there")
+    let future = MonthTrend.windowEnd(for: day(11, 1), now: trendNow, calendar: calendar)
+    expect(future == Formatting.monthStart(day(11, 1), calendar: calendar), "a future month ends the window too")
+
     print("")
     if failures == 0 {
         print("All checks passed.\n")
