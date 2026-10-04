@@ -393,6 +393,10 @@ To have alerts logged as they arrive, make a personal automation in Shortcuts
 5. Tap **⌄** beside "where" to check **Confirm Before Run** is off, then **‹**
    to save. It appears under Personal, switched on.
 
+The same steps are in the app under Settings → Set up automatic logging,
+with phrases for step 3 taken from the alerts already logged (how many of
+them each appears in, and a Copy button) and a button that opens Shortcuts.
+
 Make one per bank if their wording differs. Settings → Shortcuts → **Review
 before saving** switches the action to opening ExpLog with the expense filled
 in, to check and save — a tap per expense instead of none. The logic lives in
