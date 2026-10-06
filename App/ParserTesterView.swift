@@ -216,16 +216,29 @@ struct ParserTesterView: View {
     // MARK: - Not read
 
     private func rejected(_ reason: SMSParser.Rejection?) -> some View {
-        Section {
+        let symbol: String, title: String, detail: String
+        switch reason {
+        case .notAPayment:
+            symbol = "hand.raised.circle.fill"
+            title = "Not a card payment"
+            detail = "This reads as an OTP, a declined or scheduled payment, or a statement notice, so it isn't logged."
+        case .moneyReceived:
+            symbol = "arrow.down.circle.fill"
+            title = "Money received"
+            detail = "This reads as money coming in: a salary, refund, transfer or deposit. ExpLog logs spending only, so it's skipped."
+        default:
+            symbol = "questionmark.circle.fill"
+            title = "No amount found"
+            detail = "ExpLog looks for a currency and a number, like \(Currency.main) 42.10. Without one there's nothing to log."
+        }
+        return Section {
             VStack(spacing: 8) {
-                Image(systemName: reason == .notAPayment ? "hand.raised.circle.fill" : "questionmark.circle.fill")
+                Image(systemName: symbol)
                     .font(.largeTitle)
                     .foregroundStyle(.secondary)
-                Text(reason == .notAPayment ? "Not a card payment" : "No amount found")
+                Text(title)
                     .font(.headline)
-                Text(reason == .notAPayment
-                     ? "This reads as an OTP, a declined or scheduled payment, or a statement notice, so it isn't logged."
-                     : "ExpLog looks for a currency and a number, like \(Currency.main) 42.10. Without one there's nothing to log.")
+                Text(detail)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

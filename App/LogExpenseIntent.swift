@@ -8,7 +8,7 @@ import SwiftUI
 struct LogExpenseFromMessageIntent: AppIntent {
     static let title: LocalizedStringResource = "Log Expense from Message"
     static let description = IntentDescription(
-        "Reads a bank card alert and logs it as an expense, matching the card and category the way sharing the message would. Messages that aren't a completed card payment, such as OTPs, are skipped."
+        "Reads a bank card alert and logs it as an expense, matching the card and category the way sharing the message would. Messages that aren't spending, such as OTPs, declined payments and money received, are skipped."
     )
 
     /// Saves in the background; opens the app only to review.
@@ -29,7 +29,10 @@ struct LogExpenseFromMessageIntent: AppIntent {
 
         switch MessageLogging.prepare(message, in: context) {
         case .notAnExpense:
-            return .result(value: "", dialog: "Not a card payment, so nothing was logged.")
+            let received = SMSParser.rejection(of: message) == .moneyReceived
+            return .result(value: "", dialog: received
+                           ? "Money received, not spending, so nothing was logged."
+                           : "Not a card payment, so nothing was logged.")
 
         case .duplicate(let existing):
             let summary = MessageLogging.summary(of: existing)

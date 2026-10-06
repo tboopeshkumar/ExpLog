@@ -245,6 +245,42 @@ check("OTP", SMSParser.rejection(of: "Your OTP for transaction of AED 250.00 is 
 check("no amount", SMSParser.rejection(of: "Dear Customer, your card XXXX4417 has been activated successfully."), .noAmount, indent: "  ")
 check("a payment", SMSParser.rejection(of: "Your card XXXX4417 was used at HARBOR BOOKS NYC for USD 42.10 on 18-Sep."), nil, indent: "  ")
 
+print("\nMONEY RECEIVED ISN'T SPENDING\n")
+
+// Money coming in — salary, a refund, a transfer, a card bill payment being
+// acknowledged — isn't an expense, and is skipped.
+let moneyReceived: [(String, String)] = [
+    ("Salary", "AED 12,500.00 has been credited to your account XX660213 on 01-Oct. Available balance AED 14,210.50."),
+    ("Refund", "Refund of AED 72.57 for your purchase at SHOPNOVAUFR DI has been credited to your Debit Card XX5528."),
+    ("Reversal", "The transaction of AED 45.00 at QUICKSTOP MART on your card XXXX4417 has been reversed."),
+    ("Transfer in", "You have received AED 300.00 from ALEX MORGAN in your account XX660213."),
+    ("Cash deposit", "AED 2,000.00 was deposited to your account XX660213 at RIVERTON BRANCH ATM on 02-Oct."),
+    ("Card bill payment acknowledged", "We have received your payment of AED 1,500.00 towards your Crescent Credit Card XXXX4417. Thank you."),
+    ("Cashback", "Cashback of AED 12.40 has been credited to your Summit Cashback Card ending 6150."),
+]
+for (label, message) in moneyReceived {
+    check(label, SMSParser.rejection(of: message), .moneyReceived, indent: "  ")
+    if SMSParser.parse(message, receivedAt: referenceDate) != nil {
+        print("  ✗ \(label) was logged as an expense")
+        failures += 1
+    }
+}
+
+print("\n  …but spending that mentions the same words still is\n")
+
+// "Credit Card", a card called Cashback, and a debit that names where the
+// money was credited are all spending.
+let stillSpending: [(String, String, String)] = [
+    ("Credit card", "Your Crescent Credit Card XXXX4417 was used for AED 64.50 at NORTH LANE PHARMACY on 21-Sep. Available credit limit AED 9,120.00", "64.5"),
+    ("Card called Cashback", "Your Summit Cashback Card ending 6150 was used at STARLIGHT CINEMAS for AED 70.00.", "70"),
+    ("Debited, credited to the payee", "AED 250.00 debited from A/c XX660213 and credited to CITYCARE PHARMACY on 22-Sep. Ref R88120", "250"),
+    ("Paid to a person", "You paid AED 120.00 to ALEX MORGAN from your account XX660213 on 23-Sep.", "120"),
+    ("Cash withdrawal", "AED 500.00 withdrawn from ATM RIVERTON MALL using card XXXX8802 on 24-Sep.", "500"),
+]
+for (label, message, amount) in stillSpending {
+    check(label, SMSParser.parse(message, receivedAt: referenceDate)?.amount, Decimal(string: amount), indent: "  ")
+}
+
 print("\nLEARNED MERCHANT FORMATS\n")
 
 // The user picks the merchant's words in one message; the next message in

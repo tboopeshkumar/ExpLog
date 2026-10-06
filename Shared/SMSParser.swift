@@ -17,7 +17,7 @@ public enum SMSParser {
     public static func parse(_ text: String, receivedAt: Date = Date(), formats: [String] = []) -> ParsedTransaction? {
         let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty else { return nil }
-        guard !isNonTransaction(message) else { return nil }
+        guard !isNonTransaction(message), !isMoneyReceived(message) else { return nil }
 
         var result = ParsedTransaction()
         result.raw = message
@@ -44,6 +44,8 @@ public enum SMSParser {
     public enum Rejection: Equatable, Sendable {
         /// An OTP, a declined or scheduled payment, a statement notice.
         case notAPayment
+        /// Money coming in: a salary, refund, transfer or deposit.
+        case moneyReceived
         /// No currency and amount to log.
         case noAmount
     }
@@ -53,6 +55,7 @@ public enum SMSParser {
         let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty else { return nil }
         if isNonTransaction(message) { return .notAPayment }
+        if isMoneyReceived(message) { return .moneyReceived }
         return matchAmount(in: message) == nil ? .noAmount : nil
     }
 
@@ -71,6 +74,46 @@ public enum SMSParser {
 
     private static func isNonTransaction(_ text: String) -> Bool {
         rejectPatterns.contains { firstMatch(of: $0, in: text, caseInsensitive: true) != nil }
+    }
+
+    // MARK: - Money received
+
+    /// Money back from a purchase. Decisive on its own: a refund alert
+    /// usually names the purchase too.
+    private static let refundPatterns = [
+        #"\brefund(?:ed)?\b"#,
+        #"\brevers(?:ed|al)\b"#,
+    ]
+
+    /// Words for money going out. With one of these, "credited" is about
+    /// where the money went: "debited from A/c … and credited to PAYEE".
+    private static let spendingPatterns = [
+        #"\bdebited\b"#,
+        #"\bspent\b"#,
+        #"\bpurchased?\b"#,
+        #"\bused\b"#,
+        #"\bwithdraw(?:n|al)\b"#,
+        #"\bpaid\b"#,
+        #"\bcharged\b"#,
+    ]
+
+    /// Words for money coming in. "credited", never "credit": that's in
+    /// "Credit Card" and "credit limit" on ordinary spending alerts.
+    private static let incomingPatterns = [
+        #"\bcredited\b"#,
+        #"\bdeposit(?:ed)?\b"#,
+        #"\breceived\b"#,
+        #"\bcredit of\b"#,
+    ]
+
+    /// A salary, refund, transfer in, deposit or acknowledged card payment:
+    /// money received, which isn't spending and isn't logged.
+    private static func isMoneyReceived(_ text: String) -> Bool {
+        func has(_ patterns: [String]) -> Bool {
+            patterns.contains { firstMatch(of: $0, in: text, caseInsensitive: true) != nil }
+        }
+        if has(refundPatterns) { return true }
+        return has(incomingPatterns) && !has(spendingPatterns)
     }
 
     // MARK: - Amount

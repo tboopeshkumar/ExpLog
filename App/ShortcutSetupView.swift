@@ -130,7 +130,7 @@ struct ShortcutSetupView: View {
             }
 
             Section("Good to know") {
-                note("checkmark.shield", "OTPs, declined payments and alerts already logged are skipped.")
+                note("checkmark.shield", "OTPs, declined payments, money received and alerts already logged are skipped.")
                 note("tag", "A merchant you've categorised once arrives categorised.")
                 note("building.columns", "Make one automation per bank if their wording differs.")
             }

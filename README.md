@@ -67,6 +67,12 @@ It handles the traps these messages set:
   one year when that would put the transaction in the future.
 - **Messages that aren't transactions.** OTPs, declines and statement reminders
   are rejected outright rather than logged as spending.
+- **Money coming in.** A salary, refund, reversal, transfer in, deposit or
+  acknowledged card payment isn't spending and is skipped. "Credited" alone
+  doesn't decide it: `debited from A/c … and credited to PAYEE` is a payment,
+  so words for money going out (debited, used, paid, withdrawn…) win, except
+  over "refund" and "reversed". "Credit Card" and a card called "Cashback"
+  don't count as money received.
 - **Shouting, truncated merchants.** `ROUND CLOCK MART SUPERMA` becomes
   `Round Clock Mart Superma`; words with digits keep their case, so `20THFLOOR`
   survives intact.

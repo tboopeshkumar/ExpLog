@@ -43,6 +43,14 @@ final class ParserTesterUITests: XCTestCase {
         XCTAssertTrue(rejected.waitForExistence(timeout: 3))
         XCTAssertTrue(rejected.label.contains("Not a card payment"), rejected.label)
         snapshot("2 not a payment")
+
+        // Money coming in isn't spending.
+        app.buttons["Clear"].tap()
+        field.tap()
+        field.typeText("AED 12,500.00 has been credited to your account XX660213 on 01-Oct.")
+        XCTAssertTrue(rejected.waitForExistence(timeout: 3))
+        XCTAssertTrue(rejected.label.contains("Money received"), rejected.label)
+        snapshot("3 money received")
     }
 
     private func snapshot(_ name: String) {

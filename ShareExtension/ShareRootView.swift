@@ -94,19 +94,31 @@ struct ShareRootView: View {
 
     private var unreadableView: some View {
         let reason = SMSParser.rejection(of: sharedText)
+        let symbol: String, title: String, detail: String
+        if sharedText.isEmpty {
+            symbol = "text.badge.xmark"
+            title = "Nothing to read"
+            detail = "ExpLog wasn't given any text. Share a bank message's text."
+        } else {
+            switch reason {
+            case .notAPayment:
+                symbol = "hand.raised"
+                title = "Not a card payment"
+                detail = "This reads as an OTP, a declined or scheduled payment, or a statement notice. You can still log it by hand."
+            case .moneyReceived:
+                symbol = "arrow.down.circle"
+                title = "Money received"
+                detail = "This reads as money coming in: a salary, refund, transfer or deposit. ExpLog logs spending only. You can still log it by hand."
+            default:
+                symbol = "text.badge.xmark"
+                title = "No amount found"
+                detail = "ExpLog looks for a currency and a number, like \(Currency.main) 42.10. You can still log it by hand."
+            }
+        }
         return ContentUnavailableView {
-            Label(
-                sharedText.isEmpty ? "Nothing to read"
-                    : reason == .notAPayment ? "Not a card payment" : "No amount found",
-                systemImage: reason == .notAPayment ? "hand.raised" : "text.badge.xmark"
-            )
+            Label(title, systemImage: symbol)
         } description: {
-            Text(
-                sharedText.isEmpty ? "ExpLog wasn't given any text. Share a bank message's text."
-                    : reason == .notAPayment
-                    ? "This reads as an OTP, a declined or scheduled payment, or a statement notice. You can still log it by hand."
-                    : "ExpLog looks for a currency and a number, like \(Currency.main) 42.10. You can still log it by hand."
-            )
+            Text(detail)
         } actions: {
             Button("Enter Manually") {
                 let manual = TransactionDraft()
