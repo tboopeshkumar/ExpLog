@@ -337,9 +337,9 @@ sizes. iOS requires a full square with no alpha and no rounded corners, so the
 renderer produces exactly that and lets the system apply its own mask.
 
 The icon is a receipt with a tick in front of the message it came from, on
-teal, and teal is the app's accent colour: `AccentColor` in the asset catalog
-(a deeper teal in light mode so it reads as text on white, the icon's bright
-teal in dark mode), repeated
+indigo, and indigo is the app's accent colour: `AccentColor` in the asset
+catalog (a lighter indigo in dark mode, so it reads on dark backgrounds),
+repeated
 in `Shared/Brand.swift` for the share sheet, which has no catalog of its own.
 
 ## Importing history

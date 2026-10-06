@@ -13,7 +13,7 @@ import UniformTypeIdentifiers
 //
 // A receipt with a tick, in front of the message it came from: a bank text
 // in, a logged expense out. No currency symbol, since the parser is
-// deliberately multi-currency. The teal is the app's accent colour too
+// deliberately multi-currency. The indigo is the app's accent colour too
 // (Resources/Assets.xcassets/AccentColor.colorset and Shared/Brand.swift).
 
 let size = 1024.0
@@ -25,11 +25,11 @@ func rgb(_ hex: UInt32, _ alpha: Double = 1) -> CGColor {
             blue: Double(hex & 0xFF) / 255, alpha: alpha)
 }
 
-let gradientStart = rgb(0x2DD4BF)
-let gradientEnd = rgb(0x0B6E7A)
+let gradientStart = rgb(0x7C6CF6)
+let gradientEnd = rgb(0x3B2FB8)
 let paperColor = rgb(0xFFFFFF)
 let bubbleColor = rgb(0xFFFFFF, 0.34)
-let markColor = rgb(0x0B7285)
+let markColor = rgb(0x4338CA)
 
 // MARK: - Context
 
