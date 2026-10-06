@@ -328,10 +328,11 @@ private struct MainCurrencyPicker: View {
         }
         .navigationTitle("Main currency")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog(
+        // An alert, not a confirmation dialog: that shows as a popover with
+        // no Cancel button, which isn't obvious for a change this large.
+        .alert(
             pending.map { "Change main currency to \($0)?" } ?? "",
-            isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
-            titleVisibility: .visible
+            isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })
         ) {
             if let code = pending {
                 Button("Change to \(code)") {
