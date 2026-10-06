@@ -336,6 +336,11 @@ That writes the 1024×1024 PNG into the asset catalog; Xcode derives the smaller
 sizes. iOS requires a full square with no alpha and no rounded corners, so the
 renderer produces exactly that and lets the system apply its own mask.
 
+The icon is a log — three lines and a tick badge — on coral, and coral is the
+app's accent colour: `AccentColor` in the asset catalog (a deeper coral in
+light mode so it reads as text on white, a lighter one in dark mode), repeated
+in `Shared/Brand.swift` for the share sheet, which has no catalog of its own.
+
 ## Importing history
 
 Settings → Import CSV reads ExpLog's own CSV format — an export from the app, or

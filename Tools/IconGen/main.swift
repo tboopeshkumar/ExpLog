@@ -11,17 +11,24 @@ import UniformTypeIdentifiers
 // proportions can be changed here and re-rendered. iOS requires a full square
 // with no alpha and no rounded corners — the system applies its own mask.
 //
-// A receipt with a check through it: the expense, and the fact that it's been
-// logged. No currency symbol, since the parser is deliberately multi-currency.
+// A log: three lines of decreasing length, with the newest ticked off in a
+// badge. No currency symbol, since the parser is deliberately multi-currency.
+// The coral is the app's accent colour too (Resources/Assets.xcassets/
+// AccentColor.colorset and Shared/Brand.swift).
 
 let size = 1024.0
 
 // MARK: - Palette
 
-let gradientStart = CGColor(red: 0.09, green: 0.78, blue: 0.58, alpha: 1)
-let gradientEnd = CGColor(red: 0.02, green: 0.28, blue: 0.24, alpha: 1)
-let paperColor = CGColor(red: 1, green: 1, blue: 1, alpha: 1)
-let markColor = CGColor(red: 0.04, green: 0.30, blue: 0.24, alpha: 1)
+func rgb(_ hex: UInt32, _ alpha: Double = 1) -> CGColor {
+    CGColor(red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255,
+            blue: Double(hex & 0xFF) / 255, alpha: alpha)
+}
+
+let gradientStart = rgb(0xFF8A5B)
+let gradientEnd = rgb(0xD9412B)
+let paperColor = rgb(0xFFFFFF)
+let markColor = rgb(0xD9412B)
 
 // MARK: - Context
 
@@ -58,55 +65,39 @@ if let gradient = CGGradient(
         options: []
     )
 }
-
-// MARK: - Receipt
-
-let left = 300.0
-let right = 724.0
-let top = 796.0
-let tearLine = 332.0      // where the straight body ends
-let tearDepth = 54.0      // how far the teeth drop below it
-let corner = 52.0
-let teeth = 6
-
-let receipt = CGMutablePath()
-receipt.move(to: CGPoint(x: left, y: tearLine))
-receipt.addLine(to: CGPoint(x: left, y: top - corner))
-receipt.addArc(
-    tangent1End: CGPoint(x: left, y: top),
-    tangent2End: CGPoint(x: left + corner, y: top),
-    radius: corner
-)
-receipt.addLine(to: CGPoint(x: right - corner, y: top))
-receipt.addArc(
-    tangent1End: CGPoint(x: right, y: top),
-    tangent2End: CGPoint(x: right, y: top - corner),
-    radius: corner
-)
-receipt.addLine(to: CGPoint(x: right, y: tearLine))
-
-// Torn bottom edge, walked right to left: down to a point, back up, repeat.
-let toothWidth = (right - left) / Double(teeth)
-for index in 0..<teeth {
-    let start = right - Double(index) * toothWidth
-    receipt.addLine(to: CGPoint(x: start - toothWidth / 2, y: tearLine - tearDepth))
-    receipt.addLine(to: CGPoint(x: start - toothWidth, y: tearLine))
+// A soft light from the top-left.
+if let glow = CGGradient(
+    colorsSpace: colorSpace,
+    colors: [rgb(0xFFFFFF, 0.22), rgb(0xFFFFFF, 0)] as CFArray,
+    locations: [0, 1]
+) {
+    let centre = CGPoint(x: 260, y: 860)
+    context.drawRadialGradient(glow, startCenter: centre, startRadius: 0, endCenter: centre, endRadius: 760, options: [])
 }
-receipt.closeSubpath()
 
+// MARK: - Log lines and badge
+
+context.saveGState()
+context.setShadow(offset: CGSize(width: 0, height: -18), blur: 44, color: rgb(0x000000, 0.22))
 context.setFillColor(paperColor)
-context.addPath(receipt)
+for (index, width) in [520.0, 400.0, 300.0].enumerated() {
+    let line = CGRect(x: 200, y: 640 - Double(index) * 170, width: width, height: 104)
+    context.addPath(CGPath(roundedRect: line, cornerWidth: 52, cornerHeight: 52, transform: nil))
+}
 context.fillPath()
+context.addEllipse(in: CGRect(x: 600, y: 196, width: 268, height: 268))
+context.fillPath()
+context.restoreGState()
 
 // MARK: - Checkmark
 
 context.setStrokeColor(markColor)
-context.setLineWidth(92)
+context.setLineWidth(46)
 context.setLineCap(.round)
 context.setLineJoin(.round)
-context.move(to: CGPoint(x: 398, y: 566))
-context.addLine(to: CGPoint(x: 486, y: 474))
-context.addLine(to: CGPoint(x: 648, y: 658))
+context.move(to: CGPoint(x: 668, y: 336))
+context.addLine(to: CGPoint(x: 718, y: 284))
+context.addLine(to: CGPoint(x: 804, y: 384))
 context.strokePath()
 
 // MARK: - Write

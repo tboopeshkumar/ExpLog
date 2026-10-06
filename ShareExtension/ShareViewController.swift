@@ -57,7 +57,8 @@ final class ShareViewController: UIViewController {
         let hosting: UIHostingController<AnyView>
         switch SharedStore.shared {
         case .success(let container):
-            hosting = UIHostingController(rootView: AnyView(root.modelContainer(container)))
+            // The share sheet has no asset catalogue to take the accent from.
+            hosting = UIHostingController(rootView: AnyView(root.modelContainer(container).tint(Brand.accent)))
         case .failure(let error):
             hosting = UIHostingController(rootView: AnyView(
                 ShareErrorView(message: error.localizedDescription) { [weak self] in self?.cancel() }
