@@ -8,9 +8,17 @@ struct BackupView: View {
     @Environment(\.modelContext) private var context
     @State private var store = BackupStore.shared
 
-    /// What the file picker is open for: one picker serves both.
+    /// What the file picker is open for: one picker serves both. Kept apart
+    /// from whether it's showing, because the picker closes — clearing that —
+    /// before it reports what was chosen.
     private enum Picking { case folder, file }
-    @State private var picking: Picking?
+    @State private var purpose = Picking.folder
+    @State private var showingPicker = false
+
+    private func pick(_ what: Picking) {
+        purpose = what
+        showingPicker = true
+    }
     /// A backup read from a file, waiting for the restore to be confirmed.
     @State private var pending: Backup?
     @State private var message: (title: String, text: String)?
@@ -64,12 +72,12 @@ struct BackupView: View {
                             message = ("Backed up", "\(store.lastCount == 1 ? "1 expense" : "\(store.lastCount) expenses") saved to \(store.folderName ?? "the folder").")
                         }
                     }
-                    Button("Change Folder…") { picking = .folder }
+                    Button("Change Folder…") { pick(.folder) }
                     Button("Turn Off Backup", role: .destructive) { store.turnOff() }
                 }
             } else {
                 Section {
-                    Button("Choose a Folder…") { picking = .folder }
+                    Button("Choose a Folder…") { pick(.folder) }
                         .fontWeight(.semibold)
                     if let error = store.lastError {
                         Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -80,7 +88,7 @@ struct BackupView: View {
             }
 
             Section {
-                Button("Restore from a Backup…") { picking = .file }
+                Button("Restore from a Backup…") { pick(.file) }
             } footer: {
                 Text("Adds what's in the backup and missing here: expenses, categories, cards, remembered merchants. Nothing here is removed or replaced.")
             }
@@ -88,11 +96,9 @@ struct BackupView: View {
         .navigationTitle("Backup")
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(
-            isPresented: Binding(get: { picking != nil }, set: { if !$0 { picking = nil } }),
-            allowedContentTypes: picking == .file ? [.json] : [.folder]
+            isPresented: $showingPicker,
+            allowedContentTypes: purpose == .file ? [.json] : [.folder]
         ) { result in
-            let purpose = picking
-            picking = nil
             guard case .success(let url) = result else { return }
             if purpose == .folder {
                 store.choose(url, context: context)
