@@ -85,9 +85,22 @@ final class ExpenseFormUITests: XCTestCase {
         snapshot("5 editing")
         app.navigationBars["Edit Expense"].buttons["Cancel"].tap()
 
+        // Delete offers Undo for a few seconds, and Undo brings it back.
         row.swipeLeft()
         app.buttons["Delete"].firstMatch.tap()
+        let undo = app.buttons["undoDelete"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 3), "Undo is offered")
+        XCTAssertFalse(app.staticTexts["Form Test Cab"].exists, "gone from the list")
+        snapshot("6 undo bar")
+        undo.tap()
+        XCTAssertTrue(app.staticTexts["Form Test Cab"].waitForExistence(timeout: 3), "Undo puts it back")
+        XCTAssertFalse(undo.exists, "and the bar goes")
+
+        // Deleted for good this time: the bar leaves on its own.
+        app.staticTexts["Form Test Cab"].firstMatch.swipeLeft()
+        app.buttons["Delete"].firstMatch.tap()
         XCTAssertFalse(app.staticTexts["Form Test Cab"].waitForExistence(timeout: 2), "cleaned up")
+        XCTAssertTrue(undo.waitForNonExistence(timeout: 10), "the offer expires")
     }
 
     private func snapshot(_ name: String) {

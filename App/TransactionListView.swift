@@ -21,7 +21,7 @@ struct TransactionListView: View {
             edit: { editing = TransactionDraft(editing: $0) },
             categorise: { categorising = $0 },
             copy: { editing = TransactionDraft(copying: $0) },
-            delete: { context.delete($0); try? context.save() }
+            delete: { RecentlyDeleted.shared.delete($0, in: context) }
         )
     }
 

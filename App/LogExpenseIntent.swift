@@ -45,6 +45,9 @@ struct LogExpenseFromMessageIntent: AppIntent {
                 return .result(value: MessageLogging.summary(of: draft), dialog: "Opened in ExpLog to review.")
             }
             let saved = try draft.save(in: context)
+            // Logged without the app coming forward, so it never goes to
+            // the background to trigger the backup: do it here.
+            BackupStore.shared.backUpIfNeeded(from: context)
             let summary = MessageLogging.summary(of: saved)
             return .result(value: summary, dialog: "Logged \(summary)")
         }

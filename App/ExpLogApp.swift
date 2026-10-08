@@ -55,15 +55,27 @@ struct RootView: View {
         // route taken when there's no App Group. Runs on every return to the
         // foreground, since that's when a newly shared message is waiting.
         .onChange(of: scenePhase, initial: true) { _, phase in
+            // Up from launch, so it notices every save from the start.
+            _ = BackupStore.shared
             // Leaving the foreground: hand the share sheet the current
             // categories, cards and learned merchants. Only needed when it
             // can't read the database itself.
             if phase != .active, !SharedStore.isAppGroupAvailable {
                 ExtensionSnapshot(context: context).store()
             }
+            // In the background: bring the backup up to date if anything changed.
+            if phase == .background {
+                BackupStore.shared.backUpIfNeeded(from: context)
+            }
             guard phase == .active else { return }
             let added = SharedInbox.importPending(into: context)
             if !added.isEmpty { imported = added }
+        }
+        // Above the tab bar: a few seconds to take back a delete.
+        .overlay(alignment: .bottom) {
+            UndoDeleteBar()
+                .padding(.bottom, 64)
+                .animation(.snappy, value: RecentlyDeleted.shared.pending.count)
         }
         .sheet(item: $review.draft) { draft in
             NavigationStack {

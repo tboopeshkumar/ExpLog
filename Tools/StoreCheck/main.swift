@@ -1037,6 +1037,93 @@ func run() throws {
            String(format: "%.0f ms to search, %.0f ms to index, %d found", searching * 1000, indexing * 1000, found))
     print(String(format: "    (%.0f ms to search, %.0f ms to index once)", searching * 1000, indexing * 1000))
 
+    print("\nBACKUP AND RESTORE\n")
+
+    // Back up `learn` — categories, a subcategory, cards, a remembered
+    // merchant, a learned format, expenses from messages — plus a foreign
+    // expense with its rate and a genuine pair of identical expenses.
+    let backupShopping = try learn.fetch(FetchDescriptor<ExpenseCategory>()).first { $0.name == "Shopping" }!
+    let foreignExpense = Transaction(amount: 2500, currencyCode: "INR", date: day(9, 24), merchant: "Chai Point", category: backupShopping)
+    foreignExpense.exchangeRate = Decimal(string: "22.7")
+    foreignExpense.rateBase = "AED"
+    learn.insert(foreignExpense)
+    for _ in 0..<2 { learn.insert(Transaction(amount: 12, currencyCode: "AED", date: day(9, 28), merchant: "Aman Taxi")) }
+    try learn.save()
+
+    let backup = Backup(context: learn, now: day(10, 8))
+    let file = try backup.encoded()
+    let read = try Backup.decode(file)
+    expect(read == backup, "a backup reads back exactly as written")
+    expect(read.expenses.count == (try learn.fetchCount(FetchDescriptor<Transaction>())), "every expense is in it")
+
+    func emptyStore(_ name: String) throws -> ModelContext {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: "ExpLog\(name)-\(UUID().uuidString).store")
+        return ModelContext(try ModelContainer(
+            for: SharedStoreSchema.schema,
+            configurations: [ModelConfiguration(schema: SharedStoreSchema.schema, url: url)]
+        ))
+    }
+
+    // A fresh install: everything comes back.
+    let freshStore = try emptyStore("Restore")
+    let firstReport = try read.restore(into: freshStore)
+    let restoredExpenses = try freshStore.fetch(FetchDescriptor<Transaction>())
+    expect(firstReport.expenses == backup.expenses.count && restoredExpenses.count == backup.expenses.count,
+           "restoring onto a fresh install brings back every expense", "\(firstReport.expenses) of \(backup.expenses.count)")
+    expect(Backup(context: freshStore, now: day(10, 8)) == backup, "…and a backup of the result matches the original, field for field")
+    let restoredAbroad = restoredExpenses.first { $0.merchant == "Chai Point" }
+    expect(restoredAbroad?.exchangeRate == Decimal(string: "22.7") && restoredAbroad?.rateBase == "AED"
+               && restoredAbroad?.category?.name == "Shopping",
+           "a foreign expense keeps its rate and category")
+    expect(restoredExpenses.contains { $0.rawMessage?.contains("SHOPNOVAUFR") ?? false }, "original messages come back too")
+    expect(restoredExpenses.filter { $0.merchant == "Aman Taxi" }.count == 2, "a pair of identical expenses comes back as a pair")
+    expect(try freshStore.fetchCount(FetchDescriptor<MessageFormat>()) == backup.formats.count
+               && freshStore.fetchCount(FetchDescriptor<MerchantAlias>()) == backup.merchants.count,
+           "learned formats and remembered merchants are restored")
+    expect(TransactionDraft(parsed: LearnedParsing.parse(sheetAlert, in: freshStore)!, context: freshStore).account?.name == "Harbour Debit",
+           "a restored card still matches its alerts")
+
+    // Restoring again changes nothing.
+    let secondReport = try read.restore(into: freshStore)
+    expect(secondReport.expenses == 0 && secondReport.categories == 0 && secondReport.cards == 0
+               && secondReport.alreadyHere == backup.expenses.count,
+           "restoring the same backup twice adds nothing")
+
+    // Onto a phone that has some of it, and something newer: only what's
+    // missing is added, and what's there is left alone.
+    let partial = try emptyStore("Partial")
+    SeedData.seedIfNeeded(partial)
+    partial.insert(Transaction(amount: 12, currencyCode: "AED", date: day(9, 28), merchant: "Aman Taxi"))
+    partial.insert(Transaction(amount: 99, currencyCode: "AED", date: day(10, 7), merchant: "Logged Since"))
+    try partial.save()
+    let partialReport = try read.restore(into: partial)
+    expect(partialReport.alreadyHere == 1 && partialReport.expenses == backup.expenses.count - 1,
+           "one already here is skipped; the other of the pair is added", "\(partialReport.alreadyHere) skipped, \(partialReport.expenses) added")
+    expect(try partial.fetch(FetchDescriptor<Transaction>()).contains { $0.merchant == "Logged Since" },
+           "an expense newer than the backup is kept")
+    expect(partialReport.categories == 0, "categories that already exist aren't duplicated", "\(partialReport.categories) added")
+
+    do {
+        _ = try Backup.decode(Data("Date,Amount\n".utf8))
+        expect(false, "a file that isn't a backup is refused")
+    } catch {
+        expect(error is Backup.BackupError, "a file that isn't a backup is refused")
+    }
+
+    print("\nUNDOING A DELETE\n")
+
+    let doomed = restoredExpenses.first { $0.merchant == "Chai Point" }!
+    let deletedCopy = ExpenseSnapshot(doomed)
+    let countBefore = try freshStore.fetchCount(FetchDescriptor<Transaction>())
+    freshStore.delete(doomed)
+    try freshStore.save()
+    expect(try freshStore.fetchCount(FetchDescriptor<Transaction>()) == countBefore - 1, "deleted")
+    let back = deletedCopy.restore(in: freshStore)
+    expect(try freshStore.fetchCount(FetchDescriptor<Transaction>()) == countBefore, "undo puts it back")
+    expect(back.amount == 2500 && back.currencyCode == "INR" && back.exchangeRate == Decimal(string: "22.7")
+               && back.date == day(9, 24) && back.category?.name == "Shopping",
+           "with its amount, date, rate and category")
+
     print("")
     if failures == 0 {
         print("All checks passed.\n")

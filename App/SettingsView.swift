@@ -88,6 +88,10 @@ struct SettingsView: View {
             }
 
             Section {
+                NavigationLink { BackupView() } label: {
+                    SettingsRow("Backup", symbol: "checkmark.icloud.fill", color: .green,
+                                value: BackupStore.shared.isOn ? "On" : "Off")
+                }
                 Button {
                     export()
                 } label: {
@@ -112,7 +116,7 @@ struct SettingsView: View {
             Section {
                 LabeledContent("Version", value: Self.version)
             } footer: {
-                Text("Your expenses stay on this device; nothing is sent anywhere.")
+                Text("Your expenses stay on this device and in the backup folder you choose; nothing is sent anywhere else.")
             }
         }
         .navigationTitle("Settings")

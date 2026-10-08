@@ -385,6 +385,30 @@ only where it's a symbol of its own: "$ USD", "₹ INR", but "OMR" and "CAD"
 rather than "OMR OMR" or "CA$ CAD". The same form backs the share extension
 and editing. `ExpenseFormUITests` drives it.
 
+## Backup
+
+Settings → Backup keeps a copy of everything in a folder you pick in Files —
+iCloud Drive, Google Drive, On My iPhone. It needs no iCloud entitlement, so
+it works on a free Apple ID. One file, `ExpLog Backup.json`, is rewritten when
+the app goes to the background after something changed (and after the
+Shortcuts action logs in the background); the backup before it is kept beside
+it. It holds more than the CSV: original messages, each expense's rate,
+category icons and order, card keywords, remembered merchants and learned
+formats.
+
+Restore from a Backup merges: it adds what's missing and never removes or
+replaces what's there. Expenses have no ID to match on, so one counts as
+already present when the same moment, amount, currency and merchant is, each
+answering for only one in the file — a genuine pair of identical expenses
+comes back as a pair. Restoring twice adds nothing. Format and merge rules in
+`Shared/Backup.swift`, covered by `check-store.sh`; the folder access is in
+`App/BackupStore.swift`.
+
+## Undo
+
+Deleting an expense shows "Deleted … · Undo" above the tab bar for six
+seconds. Undo re-creates it from a snapshot with the same values.
+
 ## Quick actions
 
 Swipe an expense right for **Categorise** — a half-height sheet of categories
